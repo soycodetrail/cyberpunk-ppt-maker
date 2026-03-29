@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Output files
+*.pptx
+*.pdf
+*.png
+slide_*.png
+generated_cyberpunk_assets/
+slide_pngs/
+cyberpunk_pngs/
+pngs/
+spec.json
+demo-spec.json
+xhs-spec.json
+clone-spec.json
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
