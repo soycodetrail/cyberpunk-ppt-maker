@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cyberpunk PPT Maker"
+  short_description: "Generate neon cyberpunk PPTs, covers, and slide images."
+  default_prompt: "Use $cyberpunk-ppt-maker to create a dark neon cyberpunk PPT, cover, or matching slide images from my content."

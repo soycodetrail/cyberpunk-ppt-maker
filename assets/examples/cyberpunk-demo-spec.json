@@ -1,0 +1,54 @@
+{
+  "slides": [
+    {
+      "tag": "DEMO / CUT 01",
+      "layout": "cover",
+      "ghost": "LOCAL",
+      "title": [
+        { "text": "赛博封面", "color": "CYAN", "size": 140 },
+        { "text": "本地 AI", "color": "WHITE", "size": 108 },
+        { "text": "直接点火", "color": "ORANGE", "size": 120 }
+      ],
+      "subtitle": ["黑底 霓虹 网格。", "一页就要有封面冲击。"],
+      "chips": [
+        { "text": "16:9", "color": "ORANGE" },
+        { "text": "Cyberpunk", "color": "CYAN" },
+        { "text": "Editable", "color": "PINK" }
+      ],
+      "cards": [
+        {
+          "title": "说明",
+          "lines": ["标题短", "颜色狠", "文本可编辑"],
+          "accent": "PINK"
+        }
+      ]
+    },
+    {
+      "tag": "DEMO / CUT 02",
+      "layout": "poster_cards",
+      "ghost": "FLOW",
+      "title": [
+        { "text": "部署优势", "color": "YELLOW", "size": 120 },
+        { "text": "本地接管", "color": "WHITE", "size": 112 }
+      ],
+      "subtitle": ["隐私 稳定 控制权。"],
+      "cards": [
+        {
+          "title": "不上云",
+          "lines": ["敏感数据留在本地"],
+          "accent": "ORANGE"
+        },
+        {
+          "title": "更稳定",
+          "lines": ["延迟和波动更可控"],
+          "accent": "CYAN"
+        },
+        {
+          "title": "能接入",
+          "lines": ["IDE Agent Script 一起吃"],
+          "accent": "PINK"
+        }
+      ]
+    }
+  ]
+}
