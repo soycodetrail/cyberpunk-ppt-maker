@@ -28,6 +28,7 @@
 - [三种画布尺寸](#三种画布尺寸)
 - [项目结构](#项目结构)
 - [视觉风格说明](#视觉风格说明)
+- [视频封面生成](#视频封面生成)
 - [常见问题](#常见问题)
 - [进阶自定义](#进阶自定义)
 
@@ -47,6 +48,7 @@
 - **可编辑 PPTX**：文本框 + 光栅化背景（所有文字可修改，背景为图片）
 - **PDF 导出**：用于分享和打印
 - **PNG 幻灯片**：每页导出为独立 PNG 图片
+- **视频封面**：直接生成抖音/TikTok/YouTube/B站/小红书等平台尺寸的封面图
 
 ### 画布尺寸
 | 画布 | 分辨率 | 用途 |
@@ -792,7 +794,7 @@ Lines:
 
 - 分辨率：1920x1080
 - 比例：16:9
-- 适用于：标准演示文稿、投影、在线会议
+- 适用于：标准演示文稿、投影、在线会议、**YouTube/B站 横屏视频封面**
 
 ```markdown
 Canvas: widescreen
@@ -808,7 +810,7 @@ Canvas: widescreen
 
 - 分辨率：1080x1440
 - 比例：3:4
-- 适用于：小红书封面、社交媒体竖版海报
+- 适用于：小红书封面、社交媒体竖版海报、**小红书视频封面**
 - 视觉特点：更紧凑的排版，模糊光晕背景
 
 ```markdown
@@ -819,7 +821,7 @@ Canvas: xhs-vertical
 
 - 分辨率：1080x1920
 - 比例：9:16
-- 适用于：短视频课件、竖屏教育讲解
+- 适用于：**抖音/TikTok/快手竖屏视频封面**、短视频课件、竖屏教育讲解
 - 视觉特点：居中标题、扫描线纹理、底部装饰球体、更锐利的背景
 
 ```markdown
@@ -901,6 +903,109 @@ cyberpunk-ppt-maker/
 
 ---
 
+## 视频封面生成
+
+这个 skill 可以生成各平台视频封面。核心思路是：**用 `cover` 布局生成单页 PPTX，再导出为 PNG 图片**。
+
+### 支持的平台和尺寸
+
+| 平台 | 画布 | 分辨率 | 比例 |
+|------|------|--------|------|
+| 抖音 / TikTok / 快手 | `lecture-vertical` | 1080x1920 | 9:16 |
+| YouTube / B站 | `widescreen` | 1920x1080 | 16:9 |
+| 小红书视频 | `xhs-vertical` | 1080x1440 | 3:4 |
+| 微信视频号 | `lecture-vertical` | 1080x1920 | 9:16 |
+
+### 抖音/TikTok 竖屏视频封面
+
+#### 1. 创建 Markdown 大纲
+
+```markdown
+# AI编程教程封面
+Tag Prefix: COVER
+Canvas: lecture-vertical
+
+## AI编程
+Layout: cover
+Ghost: CODE
+Title:
+- AI 编程 | CYAN | 138
+- 从零开始 | WHITE | 110
+- 实战演示 | ORANGE | 126
+Subtitle:
+- 手把手教你用 AI 写代码。
+- 零基础也能快速上手。
+Chips:
+- Python | ORANGE
+- 零基础 | CYAN
+- 实战 | PINK
+Cards:
+- 内容 | YELLOW | 5个实战项目 ; 源码附赠 ; 永久有效
+```
+
+#### 2. 一键生成 PNG 封面图
+
+```bash
+python3 scripts/markdown_to_cyberpunk_spec.py \
+  --input video-cover.md \
+  --output video-cover-spec.json \
+  --png-dir ./video_cover_pngs
+```
+
+生成的 `./video_cover_pngs/slide_01.png` 就是 1080x1920 的竖屏封面图，可直接上传到抖音/TikTok。
+
+### YouTube/B站 横屏视频封面
+
+```markdown
+# YouTube封面
+Tag Prefix: YT
+Canvas: widescreen
+
+## 技术分享
+Layout: cover
+Ghost: TECH
+Title:
+- 深度学习 | CYAN | 140
+- 入门指南 | ORANGE | 120
+Subtitle:
+- 从原理到实践，一篇搞懂深度学习。
+Chips:
+- 教程 | ORANGE
+- AI | CYAN
+- 入门 | PINK
+```
+
+生成命令：
+
+```bash
+python3 scripts/markdown_to_cyberpunk_spec.py \
+  --input youtube-cover.md \
+  --output yt-spec.json \
+  --png-dir ./yt_cover
+```
+
+### 小红书视频封面
+
+直接使用现有示例：
+
+```bash
+python3 scripts/markdown_to_cyberpunk_spec.py \
+  --input assets/examples/xhs-vertical-cover-outline.md \
+  --output xhs-spec.json \
+  --png-dir ./xhs_cover
+```
+
+### 封面设计技巧
+
+1. **标题要短**：每个标题行不超过 8 个字，视觉冲击力更强
+2. **只用一页**：视频封面只需 `##` 一个章节，不需要多页
+3. **善用 Ghost**：设置 `Ghost: 关键词` 会在背景显示半透明大字，增加层次感
+4. **颜色搭配**：推荐组合 CYAN + ORANGE（科技感）、PINK + YELLOW（活力感）、CYAN + PURPLE（未来感）
+5. **芯片标签**：用 Chips 标注视频的关键卖点（如"零基础"、"实战"、"免费"）
+6. **字号建议**：主标题 130-150，副标题 100-120，形成明显的视觉层次
+
+---
+
 ## 常见问题
 
 ### Q: 生成的 PPT 能在 PowerPoint 中编辑吗？
@@ -970,6 +1075,15 @@ Body:
 - 要点三 | 详细说明
 - 要点四 | 详细说明
 ```
+
+### Q: 如何生成视频封面？
+
+完全可以。用 `cover` 布局生成单页 PPT，然后导出为 PNG：
+- 抖音/TikTok 竖屏：使用 `Canvas: lecture-vertical`（1080x1920）
+- YouTube/B站 横屏：使用 `Canvas: widescreen`（1920x1080）
+- 小红书：使用 `Canvas: xhs-vertical`（1080x1440）
+
+详细用法见上方 [视频封面生成](#视频封面生成) 章节。
 
 ### Q: 文字太长怎么办？
 
