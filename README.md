@@ -279,3 +279,11 @@ python3 scripts/export_cyberpunk_images.py \
 ## 作者
 
 SoyCodeTrail
+
+### 联系作者
+
+
+- 微信
+![image-20260430232114849](docs/images/wechat.png)
+- 小红书
+![image-20260430232131575](docs/images/xiaohongshu.png)
