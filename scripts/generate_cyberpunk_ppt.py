@@ -60,6 +60,58 @@ def add_glow_to_run(run, glow_color: RGBColor, size: int = 50000) -> None:
         pass
 
 
+def add_outer_shadow(shape, color_rgb: str = "000000",
+                     blur_rad: int = 76200, dist: int = 25400,
+                     direction: int = 5400000, alpha_pct: int = 40000):
+    """Add an outer drop shadow to a shape via OOXML injection."""
+    try:
+        spPr = shape._element.find(".//a:spPr", NSMAP)
+        if spPr is None:
+            return
+        effectLst = _ensure_effect_lst(spPr)
+        outerShdw = etree.SubElement(effectLst, "{%s}outerShdw" % NSMAP["a"])
+        outerShdw.set("blurRad", str(blur_rad))
+        outerShdw.set("dist", str(dist))
+        outerShdw.set("dir", str(direction))
+        outerShdw.set("algn", "bl")
+        outerShdw.set("rotWithShape", "0")
+        srgbClr = etree.SubElement(outerShdw, "{%s}srgbClr" % NSMAP["a"])
+        srgbClr.set("val", color_rgb)
+        alpha = etree.SubElement(srgbClr, "{%s}alpha" % NSMAP["a"])
+        alpha.set("val", str(alpha_pct))
+    except Exception:
+        pass
+
+
+def add_accent_line(slide, left_px, top_px, width_px, color_name, thickness=3):
+    """Add a thin horizontal accent/separator line with glow."""
+    accent = color(color_name)
+    line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, px(left_px), px(top_px), px(width_px), px(thickness))
+    line.fill.solid()
+    line.fill.fore_color.rgb = accent
+    line.line.fill.background()
+    add_glow_to_shape(line, accent, size=18000)
+
+
+def add_gradient_panel(slide, left_px, top_px, width_px, height_px, accent_name, transparency=0.30):
+    """Add a rounded rectangle card with gradient fill and glow border."""
+    accent = color(accent_name)
+    shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, px(left_px), px(top_px), px(width_px), px(height_px))
+    fill = shape.fill
+    fill.gradient()
+    fill.gradient_stops[0].color.rgb = RGBColor(10, 10, 18)
+    fill.gradient_stops[0].position = 0.0
+    fill.gradient_stops[1].color.rgb = RGBColor(18, 18, 32)
+    fill.gradient_stops[1].position = 1.0
+    shape.fill.transparency = transparency
+    shape.line.color.rgb = RGBColor(255, 255, 255)
+    shape.line.width = Pt(1.2)
+    add_glow_to_shape(shape, accent, size=40000)
+    add_outer_shadow(shape, color_rgb="%02X%02X%02X" % (accent[0], accent[1], accent[2]),
+                     blur_rad=50000, dist=12700, direction=5400000, alpha_pct=25000)
+    return shape
+
+
 CANVAS_PRESETS = {
     "widescreen": {
         "width": 1920,
@@ -82,6 +134,8 @@ CANVAS_PRESETS = {
 }
 
 FONT_PATH_BLACK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc"
+FONT_PATH_REGULAR = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+FONT_PATH_MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
 COLORS = {
     "WHITE": RGBColor(255, 255, 255),
@@ -139,6 +193,89 @@ def _box_height_for_pt(pt_size: int) -> int:
 def _line_advance_for_pt(pt_size: int) -> int:
     """Y advance (px) after rendering one title line at the given pt size."""
     return _box_height_for_pt(pt_size) + 8
+
+
+def _resolve_font_path(font_name: str) -> str:
+    if "Mono" in font_name or "mono" in font_name:
+        return FONT_PATH_MONO
+    return FONT_PATH_BLACK
+
+
+def measure_text(text: str, font_path: str, font_size_pt: int, max_width_px: int) -> dict:
+    """Measure text with Pillow getbbox() and simulate word wrapping.
+
+    Returns dict with lines, num_lines, total_height_px, max_width_px.
+    Handles CJK characters (each char is a word boundary) and Latin words.
+    """
+    font = ImageFont.truetype(font_path, font_size_pt)
+
+    # Split into tokens: CJK chars as individual tokens, Latin words grouped
+    tokens: list[str] = []
+    for ch in text:
+        # CJK Unified Ideographs, Hiragana, Katakana, etc.
+        if '一' <= ch <= '鿿' or '぀' <= ch <= 'ヿ' or '가' <= ch <= '힯':
+            tokens.append(ch)
+        elif ch in (' ', '\t'):
+            if tokens and tokens[-1] != ' ':
+                tokens.append(' ')
+        else:
+            if tokens and tokens[-1] not in (' ', '') and '一' <= tokens[-1][-1] <= '鿿':
+                tokens.append(ch)
+            elif tokens and tokens[-1] not in (' ', ''):
+                tokens[-1] += ch
+            else:
+                tokens.append(ch)
+
+    lines: list[str] = []
+    current_line = ""
+
+    for token in tokens:
+        if token == ' ':
+            current_line += ' '
+            continue
+        test_line = current_line + token
+        bbox = font.getbbox(test_line)
+        text_width = bbox[2] - bbox[0]
+        if text_width > max_width_px and current_line.strip():
+            lines.append(current_line.strip())
+            current_line = token
+        else:
+            current_line = test_line
+
+    if current_line.strip():
+        lines.append(current_line.strip())
+
+    ascent, descent = font.getmetrics()
+    line_height = int((ascent + descent) * 1.15)
+    total_height = len(lines) * line_height
+    max_line_width = max(
+        font.getbbox(line)[2] - font.getbbox(line)[0]
+        for line in lines
+    ) if lines else 0
+
+    return {
+        "lines": lines,
+        "num_lines": len(lines),
+        "total_height_px": total_height,
+        "max_width_px": max_line_width,
+        "line_height_px": line_height,
+    }
+
+
+def fit_text_to_box(
+    text: str,
+    font_path: str,
+    max_width_px: int,
+    max_height_px: int,
+    max_pt: int = 18,
+    min_pt: int = 8,
+) -> int:
+    """Return the largest font size (pt) that fits text in the box."""
+    for pt in range(max_pt, min_pt - 1, -1):
+        metrics = measure_text(text, font_path, pt, max_width_px)
+        if metrics["total_height_px"] <= max_height_px:
+            return pt
+    return min_pt
 
 
 def get_canvas(spec: dict) -> dict:
@@ -292,16 +429,31 @@ def build_lecture_background(idx: int, slide_spec: dict, asset_dir: Path, width:
 # Shared shape helpers
 # ---------------------------------------------------------------------------
 
-def add_textbox(slide, left, top, width, height, paragraphs, align=PP_ALIGN.LEFT, valign=MSO_ANCHOR.TOP):
+def add_textbox(slide, left, top, width, height, paragraphs, align=PP_ALIGN.LEFT, valign=MSO_ANCHOR.TOP, auto_fit=False):
     box = slide.shapes.add_textbox(left, top, width, height)
     frame = box.text_frame
     frame.clear()
     frame.word_wrap = True
     frame.vertical_anchor = valign
-    frame.margin_left = Pt(2)
-    frame.margin_right = Pt(2)
-    frame.margin_top = Pt(0)
-    frame.margin_bottom = Pt(0)
+    frame.margin_left = Pt(4)
+    frame.margin_right = Pt(4)
+    frame.margin_top = Pt(2)
+    frame.margin_bottom = Pt(2)
+
+    # Auto-fit: measure total text height and shrink if needed
+    if auto_fit and paragraphs:
+        box_width_px = int(width / 12700)
+        box_height_px = int(height / 12700)
+        if box_width_px > 20 and box_height_px > 10:
+            full_text = "\n".join(p["text"] for p in paragraphs)
+            font_name = paragraphs[0].get("font", "Noto Sans CJK SC")
+            font_path = _resolve_font_path(font_name)
+            max_pt = paragraphs[0].get("size", 18)
+            inner_width = box_width_px - 10
+            best_pt = fit_text_to_box(full_text, font_path, inner_width, box_height_px - 6, max_pt=max_pt, min_pt=8)
+            if best_pt < max_pt:
+                for p in paragraphs:
+                    p["size"] = best_pt
 
     for idx, spec in enumerate(paragraphs):
         paragraph = frame.paragraphs[0] if idx == 0 else frame.add_paragraph()
@@ -363,13 +515,15 @@ def add_page_no(slide, num, canvas_name="widescreen"):
 # ---------------------------------------------------------------------------
 
 def add_title_block(slide, title_lines, subtitle, left_px=118, top_px=168, width_px=980):
-    """Render title lines + subtitle. Returns Y position after the entire block."""
+    """Render title lines + subtitle with measured text. Returns Y position after the entire block."""
     y = top_px
     for item in title_lines:
         pixel_size = int(item["size"])
         pt_size = max(26, int(pixel_size * 0.46))
-        box_h = _box_height_for_pt(pt_size)
         text_color = color(item["color"])
+        # Measure actual text to determine box height
+        metrics = measure_text(item["text"], FONT_PATH_BLACK, pt_size, width_px - 10)
+        box_h = max(_box_height_for_pt(pt_size), metrics["total_height_px"] + 12)
         add_textbox(
             slide,
             px(left_px),
@@ -378,16 +532,18 @@ def add_title_block(slide, title_lines, subtitle, left_px=118, top_px=168, width
             px(box_h),
             [{"text": item["text"], "size": pt_size, "color": text_color, "glow": 54000}],
         )
-        y += _line_advance_for_pt(pt_size)
+        y += box_h + 10
     if subtitle:
-        sub_h = 72
+        sub_text = " ".join(subtitle)
+        sub_metrics = measure_text(sub_text, FONT_PATH_BLACK, 18, min(width_px, 860) - 10)
+        sub_h = max(72, sub_metrics["total_height_px"] + 16)
         add_textbox(
             slide,
             px(left_px + 4),
             px(y + 10),
             px(min(width_px, 860)),
             px(sub_h),
-            [{"text": " ".join(subtitle), "size": 18, "bold": False, "color": COLORS["WHITE"], "line_spacing": 1.05}],
+            [{"text": sub_text, "size": 18, "bold": False, "color": COLORS["WHITE"], "line_spacing": 1.05}],
         )
         y += sub_h + 14
     return y
@@ -398,8 +554,9 @@ def add_title_block_vertical(slide, title_lines, subtitle, left_px=88, top_px=17
     for item in title_lines:
         pixel_size = int(item["size"])
         pt_size = max(24, int(pixel_size * 0.38))
-        box_h = _box_height_for_pt(pt_size)
         text_color = color(item["color"])
+        metrics = measure_text(item["text"], FONT_PATH_BLACK, pt_size, width_px - 10)
+        box_h = max(_box_height_for_pt(pt_size), metrics["total_height_px"] + 12)
         add_textbox(
             slide,
             px(left_px),
@@ -408,16 +565,18 @@ def add_title_block_vertical(slide, title_lines, subtitle, left_px=88, top_px=17
             px(box_h),
             [{"text": item["text"], "size": pt_size, "color": text_color, "glow": 48000}],
         )
-        y += _line_advance_for_pt(pt_size)
+        y += box_h + 10
     if subtitle:
-        sub_h = 60
+        sub_text = " ".join(subtitle)
+        sub_metrics = measure_text(sub_text, FONT_PATH_BLACK, 15, width_px - 30)
+        sub_h = max(60, sub_metrics["total_height_px"] + 14)
         add_textbox(
             slide,
             px(left_px + 4),
             px(y + 8),
             px(width_px - 20),
             px(sub_h),
-            [{"text": " ".join(subtitle), "size": 15, "bold": False, "color": COLORS["WHITE"], "line_spacing": 1.02}],
+            [{"text": sub_text, "size": 15, "bold": False, "color": COLORS["WHITE"], "line_spacing": 1.02}],
         )
         y += sub_h + 10
     return y
@@ -429,8 +588,9 @@ def add_title_block_lecture(slide, title_lines, subtitle, top_px=260, width_px=8
     for item in title_lines:
         pixel_size = int(item["size"])
         pt_size = max(24, int(pixel_size * 0.36))
-        box_h = _box_height_for_pt(pt_size)
         text_color = color(item["color"])
+        metrics = measure_text(item["text"], FONT_PATH_BLACK, pt_size, width_px - 10)
+        box_h = max(_box_height_for_pt(pt_size), metrics["total_height_px"] + 12)
         add_textbox(
             slide,
             px(center_left),
@@ -441,16 +601,18 @@ def add_title_block_lecture(slide, title_lines, subtitle, top_px=260, width_px=8
             align=PP_ALIGN.CENTER,
             valign=MSO_ANCHOR.MIDDLE,
         )
-        y += _line_advance_for_pt(pt_size)
+        y += box_h + 10
     if subtitle:
-        sub_h = 60
+        sub_text = " ".join(subtitle)
+        sub_metrics = measure_text(sub_text, FONT_PATH_BLACK, 15, width_px - 30)
+        sub_h = max(60, sub_metrics["total_height_px"] + 14)
         add_textbox(
             slide,
             px(center_left + 10),
             px(y + 14),
             px(width_px - 20),
             px(sub_h),
-            [{"text": " ".join(subtitle), "size": 15, "bold": False, "color": COLORS["WHITE"], "line_spacing": 1.05}],
+            [{"text": sub_text, "size": 15, "bold": False, "color": COLORS["WHITE"], "line_spacing": 1.05}],
             align=PP_ALIGN.CENTER,
             valign=MSO_ANCHOR.MIDDLE,
         )
@@ -468,31 +630,33 @@ def add_panel(slide, left_px, top_px, width_px, height_px, title, lines, accent_
     height_px = min(height_px, safe["max_y"] - top_px)
     if height_px < 60:
         height_px = 60
-    shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, px(left_px), px(top_px), px(width_px), px(height_px))
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = COLORS["CARD"]
-    shape.fill.transparency = 0.30
-    shape.line.color.rgb = RGBColor(255, 255, 255)
-    shape.line.width = Pt(1.2)
-    add_glow_to_shape(shape, accent, size=40000)
-    add_textbox(slide, px(left_px + 24), px(top_px + 14), px(width_px - 48), px(30), [{"text": title, "size": title_size, "color": accent}])
+    add_gradient_panel(slide, left_px, top_px, width_px, height_px, accent_name)
+    # Accent line under title
+    add_accent_line(slide, left_px + 24, top_px + 44, min(width_px - 48, 200), accent_name, thickness=2)
+    add_textbox(slide, px(left_px + 24), px(top_px + 14), px(width_px - 48), px(28), [{"text": title, "size": title_size, "color": accent}])
     body_font = "DejaVu Sans Mono" if mono else "Noto Sans CJK SC"
     effective_body_size = 14 if mono else body_size
     paragraphs = [{"text": line, "size": effective_body_size, "bold": False, "color": COLORS["WHITE"], "font": body_font, "space_after": 4} for line in lines]
-    body_top = top_px + 48
-    body_height = max(20, height_px - 56)
-    add_textbox(slide, px(left_px + 24), px(body_top), px(width_px - 48), px(body_height), paragraphs)
+    body_top = top_px + 52
+    body_height = max(20, height_px - 60)
+    add_textbox(slide, px(left_px + 24), px(body_top), px(width_px - 48), px(body_height), paragraphs, auto_fit=True)
 
 
 def add_chip(slide, left_px, top_px, text, color_name):
     accent = color(color_name)
     shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, px(left_px), px(top_px), px(230), px(50))
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = COLORS["CARD"]
-    shape.fill.transparency = 0.30
+    fill = shape.fill
+    fill.gradient()
+    fill.gradient_stops[0].color.rgb = RGBColor(10, 10, 18)
+    fill.gradient_stops[0].position = 0.0
+    fill.gradient_stops[1].color.rgb = RGBColor(20, 20, 30)
+    fill.gradient_stops[1].position = 1.0
+    shape.fill.transparency = 0.25
     shape.line.color.rgb = RGBColor(255, 255, 255)
     shape.line.width = Pt(1.0)
     add_glow_to_shape(shape, accent, size=30000)
+    add_outer_shadow(shape, color_rgb="%02X%02X%02X" % (accent[0], accent[1], accent[2]),
+                     blur_rad=38000, dist=12700, direction=5400000, alpha_pct=20000)
     add_textbox(slide, px(left_px + 16), px(top_px + 12), px(198), px(22), [{"text": text, "size": 13, "color": accent}], align=PP_ALIGN.CENTER)
 
 
@@ -503,6 +667,8 @@ def add_chip(slide, left_px, top_px, text, color_name):
 def render_cover(slide, spec):
     safe = SLIDE_SAFE["widescreen"]
     bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), left_px=118, top_px=160, width_px=980)
+    # Decorative accent line below title
+    add_accent_line(slide, 118, bottom + 6, 320, "CYAN", thickness=3)
     # Card on the right, vertically centered relative to title
     cards = spec.get("cards", [])
     if cards:
@@ -523,6 +689,7 @@ def render_cover(slide, spec):
 def render_poster_cards(slide, spec):
     safe = SLIDE_SAFE["widescreen"]
     bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=940)
+    add_accent_line(slide, 118, bottom + 6, 280, "PINK", thickness=2)
     cards = spec.get("cards", [])
     base_y = _clamp(bottom + 50, 440, 660)
     card_h = min(220, safe["max_y"] - base_y - 20)
@@ -647,7 +814,8 @@ def render_statement(slide, spec):
 
 
 def render_ending(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), left_px=150, top_px=250, width_px=980)
+    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), left_px=150, top_px=250, width_px=980)
+    add_accent_line(slide, 150, bottom + 6, 400, "CYAN", thickness=2)
     add_textbox(slide, px(360), px(860), px(1200), px(30), [{"text": spec.get("footer", ""), "size": 12, "bold": False, "color": COLORS["MUTED"]}], align=PP_ALIGN.CENTER)
 
 
