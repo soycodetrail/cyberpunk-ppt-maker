@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-import random
 import shutil
 import subprocess
 import tempfile
@@ -15,6 +14,50 @@ from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
+from lxml import etree
+
+NSMAP = {
+    "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+}
+
+
+def _ensure_effect_lst(spPr) -> etree._Element:
+    effectLst = spPr.find("a:effectLst", NSMAP)
+    if effectLst is None:
+        effectLst = etree.SubElement(spPr, "{%s}effectLst" % NSMAP["a"])
+    return effectLst
+
+
+def add_glow_to_shape(shape, glow_color: RGBColor, size: int = 40000) -> None:
+    try:
+        spPr = shape._element.find(".//a:spPr", NSMAP)
+        if spPr is None:
+            return
+        effectLst = _ensure_effect_lst(spPr)
+        glow = etree.SubElement(effectLst, "{%s}glow" % NSMAP["a"])
+        glow.set("rad", str(size))
+        srgb = etree.SubElement(glow, "{%s}srgbClr" % NSMAP["a"])
+        srgb.set("val", "%02X%02X%02X" % (glow_color[0], glow_color[1], glow_color[2]))
+        alpha = etree.SubElement(srgb, "{%s}alpha" % NSMAP["a"])
+        alpha.set("val", "35000")
+    except Exception:
+        pass
+
+
+def add_glow_to_run(run, glow_color: RGBColor, size: int = 50000) -> None:
+    try:
+        rPr = run._r.find(".//a:rPr", NSMAP)
+        if rPr is None:
+            return
+        effectLst = _ensure_effect_lst(rPr)
+        glow = etree.SubElement(effectLst, "{%s}glow" % NSMAP["a"])
+        glow.set("rad", str(size))
+        srgb = etree.SubElement(glow, "{%s}srgbClr" % NSMAP["a"])
+        srgb.set("val", "%02X%02X%02X" % (glow_color[0], glow_color[1], glow_color[2]))
+        alpha = etree.SubElement(srgb, "{%s}alpha" % NSMAP["a"])
+        alpha.set("val", "40000")
+    except Exception:
+        pass
 
 
 CANVAS_PRESETS = {
@@ -41,19 +84,27 @@ CANVAS_PRESETS = {
 FONT_PATH_BLACK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc"
 
 COLORS = {
-    "WHITE": RGBColor(246, 245, 248),
+    "WHITE": RGBColor(255, 255, 255),
     "MUTED": RGBColor(188, 194, 210),
     "SOFT": RGBColor(120, 132, 154),
-    "CARD": RGBColor(13, 16, 24),
-    "CARD_2": RGBColor(9, 12, 18),
-    "CYAN": RGBColor(61, 227, 255),
-    "BLUE": RGBColor(91, 169, 255),
-    "ORANGE": RGBColor(255, 170, 43),
-    "YELLOW": RGBColor(255, 218, 65),
-    "PINK": RGBColor(255, 94, 170),
-    "RED": RGBColor(255, 96, 94),
-    "PURPLE": RGBColor(180, 108, 255),
-    "LIME": RGBColor(162, 255, 127),
+    "CARD": RGBColor(10, 10, 10),
+    "CARD_2": RGBColor(5, 5, 8),
+    "CYAN": RGBColor(0, 255, 255),
+    "BLUE": RGBColor(59, 130, 246),
+    "ORANGE": RGBColor(249, 115, 22),
+    "YELLOW": RGBColor(251, 191, 36),
+    "PINK": RGBColor(236, 72, 153),
+    "RED": RGBColor(255, 51, 102),
+    "PURPLE": RGBColor(139, 92, 246),
+    "LIME": RGBColor(16, 185, 129),
+    "TEAL": RGBColor(20, 184, 166),
+}
+
+# Safe area margins (px) — tag at top, page number at bottom
+SLIDE_SAFE = {
+    "widescreen": {"max_y": 980, "max_x": 1860, "top_y": 110},
+    "xhs-vertical": {"max_y": 1380, "max_x": 1020, "top_y": 110},
+    "lecture-vertical": {"max_y": 1860, "max_x": 1020, "top_y": 150},
 }
 
 
@@ -76,6 +127,20 @@ def pil_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(FONT_PATH_BLACK, size)
 
 
+def _clamp(val: int, lo: int, hi: int) -> int:
+    return max(lo, min(val, hi))
+
+
+def _box_height_for_pt(pt_size: int) -> int:
+    """Minimum textbox height (px) to fit a given pt font size without overflow."""
+    return max(50, int(pt_size * 2.4))
+
+
+def _line_advance_for_pt(pt_size: int) -> int:
+    """Y advance (px) after rendering one title line at the given pt size."""
+    return _box_height_for_pt(pt_size) + 8
+
+
 def get_canvas(spec: dict) -> dict:
     canvas_name = spec.get("canvas", "widescreen")
     try:
@@ -83,6 +148,10 @@ def get_canvas(spec: dict) -> dict:
     except KeyError as exc:
         raise ValueError(f"Unsupported canvas: {canvas_name}") from exc
 
+
+# ---------------------------------------------------------------------------
+# Background generation (unchanged)
+# ---------------------------------------------------------------------------
 
 def build_background(idx: int, slide_spec: dict, asset_dir: Path, width: int, height: int) -> Path:
     canvas_name = slide_spec.get("_canvas_name", "widescreen")
@@ -94,73 +163,52 @@ def build_background(idx: int, slide_spec: dict, asset_dir: Path, width: int, he
 
 def build_poster_background(idx: int, slide_spec: dict, asset_dir: Path, width: int, height: int) -> Path:
     asset_dir.mkdir(parents=True, exist_ok=True)
-    cycle = [COLORS["ORANGE"], COLORS["CYAN"], COLORS["PINK"]]
-    a1 = to_rgb(cycle[idx % 3])
-    a2 = to_rgb(cycle[(idx + 1) % 3])
-    a3 = to_rgb(cycle[(idx + 2) % 3])
+    accent_cycle = [
+        (COLORS["RED"], COLORS["YELLOW"], COLORS["CYAN"]),
+        (COLORS["CYAN"], COLORS["PURPLE"], COLORS["PINK"]),
+        (COLORS["YELLOW"], COLORS["TEAL"], COLORS["ORANGE"]),
+        (COLORS["BLUE"], COLORS["PINK"], COLORS["LIME"]),
+    ]
+    palette = accent_cycle[idx % len(accent_cycle)]
+    a1, a2, a3 = to_rgb(palette[0]), to_rgb(palette[1]), to_rgb(palette[2])
 
-    img = Image.new("RGB", (width, height), (8, 9, 14))
-    draw = ImageDraw.Draw(img, "RGBA")
-
-    for y in range(height):
-        t = y / max(1, height - 1)
-        fill = (int(8 + 18 * t), int(9 + 16 * t), int(14 + 20 * t))
-        draw.line((0, y, width, y), fill=fill, width=1)
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 255))
 
     glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     gdraw = ImageDraw.Draw(glow, "RGBA")
-    gdraw.ellipse((-80, int(height * 0.11), int(width * 0.29), int(height * 0.78)), fill=a1 + (60,))
-    gdraw.ellipse((width - int(width * 0.34), -100, width + 60, int(height * 0.33)), fill=a2 + (52,))
-    gdraw.ellipse((width - int(width * 0.24), height - int(height * 0.28), width + 120, height + 80), fill=a3 + (54,))
-    glow = glow.filter(ImageFilter.GaussianBlur(radius=44))
-    img = Image.alpha_composite(img.convert("RGBA"), glow)
+    cx, cy = width // 2, height // 2
+    gdraw.ellipse((cx - int(width * 0.22), cy - int(height * 0.28), cx + int(width * 0.22), cy + int(height * 0.28)), fill=a1 + (14,))
+    gdraw.ellipse((int(width * 0.72), int(height * 0.08), width + 60, int(height * 0.42)), fill=a2 + (11,))
+    gdraw.ellipse((-60, int(height * 0.62), int(width * 0.28), height + 40), fill=a3 + (12,))
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=35))
+    img = Image.alpha_composite(img, glow)
     draw = ImageDraw.Draw(img, "RGBA")
 
-    for x in range(0, width, max(72, width // 20)):
-        draw.line((x, 0, x, height), fill=(255, 255, 255, 18), width=1)
-    for y in range(0, height, max(68, height // 15)):
-        draw.line((0, y, width, y), fill=(255, 255, 255, 14), width=1)
-    for x in range(-300, width + 300, max(110, width // 15)):
-        draw.line((x, 0, x + max(220, width // 7), height), fill=a2 + (18,), width=1)
-
-    draw.polygon([(0, 0), (int(width * 0.19), 0), (int(width * 0.27), int(height * 0.11)), (int(width * 0.10), int(height * 0.17))], fill=a1 + (70,))
-    draw.polygon([(width - int(width * 0.18), 0), (width, 0), (width, int(height * 0.20)), (width - int(width * 0.06), int(height * 0.16))], fill=a2 + (72,))
-    draw.polygon([(0, height), (int(width * 0.15), height), (int(width * 0.22), height - int(height * 0.10)), (int(width * 0.03), height - int(height * 0.14))], fill=a3 + (60,))
+    grid_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    gdraw_grid = ImageDraw.Draw(grid_layer, "RGBA")
+    grid_step = max(60, width // 24)
+    for x in range(0, width, grid_step):
+        gdraw_grid.line((x, 0, x, height), fill=(255, 255, 255, 12), width=1)
+    for y in range(0, height, grid_step):
+        gdraw_grid.line((0, y, width, y), fill=(255, 255, 255, 10), width=1)
+    grid_layer = grid_layer.filter(ImageFilter.GaussianBlur(radius=2))
+    img = Image.alpha_composite(img, grid_layer)
+    draw = ImageDraw.Draw(img, "RGBA")
 
     ghost = slide_spec.get("ghost", "")
     if ghost:
         ghost_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         ghost_draw = ImageDraw.Draw(ghost_layer)
-        ghost_draw.text((width - 120, int(height * 0.17)), ghost, font=pil_font(max(160, min(width, height) // 4)), fill=a3 + (24,), anchor="ra")
-        ghost_layer = ghost_layer.filter(ImageFilter.GaussianBlur(radius=2))
+        ghost_draw.text((width - 100, int(height * 0.18)), ghost, font=pil_font(max(140, min(width, height) // 5)), fill=a3 + (18,), anchor="ra")
+        ghost_layer = ghost_layer.filter(ImageFilter.GaussianBlur(radius=3))
         img = Image.alpha_composite(img, ghost_layer)
         draw = ImageDraw.Draw(img, "RGBA")
 
-    draw.rounded_rectangle((28, 28, width - 28, height - 28), radius=26, outline=a1 + (160,), width=3)
-    draw.rounded_rectangle((42, 42, width - 42, height - 42), radius=22, outline=(255, 255, 255, 26), width=1)
-    draw.line((68, 106, width - 68, 106), fill=a2 + (120,), width=2)
-    draw.line((108, height - 94, width - 108, height - 94), fill=(255, 255, 255, 22), width=1)
+    draw.rounded_rectangle((24, 24, width - 24, height - 24), radius=10, outline=(255, 255, 255, 25), width=1)
 
     output = asset_dir / f"poster_bg_{idx + 1:02d}.jpg"
-    img.convert("RGB").save(output, quality=82, optimize=True, progressive=True)
+    img.convert("RGB").save(output, quality=90, optimize=True, progressive=True)
     return output
-
-
-def add_lecture_noise(image: Image.Image, seed: int) -> Image.Image:
-    rng = random.Random(seed)
-    pixels = image.load()
-    width, height = image.size
-    for y in range(height):
-        for x in range(width):
-            grain = rng.randint(-14, 14)
-            r, g, b, a = pixels[x, y]
-            pixels[x, y] = (
-                max(0, min(255, r + grain)),
-                max(0, min(255, g + grain)),
-                max(0, min(255, b + grain)),
-                a,
-            )
-    return image
 
 
 def add_lecture_scanlines(image: Image.Image) -> Image.Image:
@@ -199,35 +247,50 @@ def add_lecture_orb(image: Image.Image, palette: list[tuple[int, int, int]]) -> 
 
 def build_lecture_background(idx: int, slide_spec: dict, asset_dir: Path, width: int, height: int) -> Path:
     asset_dir.mkdir(parents=True, exist_ok=True)
-    cycle = [COLORS["ORANGE"], COLORS["CYAN"], COLORS["PINK"]]
-    a1 = to_rgb(cycle[idx % 3])
-    a2 = to_rgb(cycle[(idx + 1) % 3])
-    a3 = to_rgb(cycle[(idx + 2) % 3])
+    accent_cycle = [
+        (COLORS["RED"], COLORS["YELLOW"], COLORS["CYAN"]),
+        (COLORS["CYAN"], COLORS["PURPLE"], COLORS["PINK"]),
+        (COLORS["YELLOW"], COLORS["TEAL"], COLORS["ORANGE"]),
+        (COLORS["BLUE"], COLORS["PINK"], COLORS["LIME"]),
+    ]
+    palette = accent_cycle[idx % len(accent_cycle)]
+    a1, a2, a3 = to_rgb(palette[0]), to_rgb(palette[1]), to_rgb(palette[2])
 
-    img = Image.new("RGBA", (width, height), (10, 9, 15, 255))
-    draw = ImageDraw.Draw(img, "RGBA")
-
-    for y in range(height):
-        t = y / max(1, height - 1)
-        fill = (int(10 + 10 * t), int(9 + 9 * t), int(15 + 12 * t), 255)
-        draw.line((0, y, width, y), fill=fill, width=1)
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 255))
 
     glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     gdraw = ImageDraw.Draw(glow, "RGBA")
-    draw_layered_glow(gdraw, (width // 2, 320), [340, 250, 160], a1, [32, 26, 20])
-    draw_layered_glow(gdraw, (220, 930), [300, 220, 140], a2, [28, 22, 16])
-    draw_layered_glow(gdraw, (900, 1220), [280, 190, 120], a3, [28, 20, 14])
-    draw_layered_glow(gdraw, (width // 2, 1560), [210, 140], a1, [18, 12])
+    draw_layered_glow(gdraw, (width // 2, 320), [180, 130, 80], a1, [14, 10, 7])
+    draw_layered_glow(gdraw, (140, 960), [160, 110, 70], a2, [12, 9, 6])
+    draw_layered_glow(gdraw, (880, 1240), [150, 100, 60], a3, [12, 8, 5])
+    draw_layered_glow(gdraw, (width // 2, 1580), [110, 70], a1, [8, 5])
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=30))
     img = Image.alpha_composite(img, glow)
 
+    grid_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    gdraw_grid = ImageDraw.Draw(grid_layer, "RGBA")
+    grid_step = max(54, width // 20)
+    for x in range(0, width, grid_step):
+        gdraw_grid.line((x, 0, x, height), fill=(255, 255, 255, 10), width=1)
+    for y in range(0, height, grid_step):
+        gdraw_grid.line((0, y, width, y), fill=(255, 255, 255, 8), width=1)
+    grid_layer = grid_layer.filter(ImageFilter.GaussianBlur(radius=2))
+    img = Image.alpha_composite(img, grid_layer)
+
     img = add_lecture_scanlines(img)
-    img = add_lecture_noise(img, seed=200 + idx)
     img = add_lecture_orb(img, [a1, a2, a3])
+
+    draw = ImageDraw.Draw(img, "RGBA")
+    draw.rounded_rectangle((20, 20, width - 20, height - 20), radius=8, outline=(255, 255, 255, 24), width=1)
 
     output = asset_dir / f"lecture_bg_{idx + 1:02d}.png"
     img.save(output)
     return output
 
+
+# ---------------------------------------------------------------------------
+# Shared shape helpers
+# ---------------------------------------------------------------------------
 
 def add_textbox(slide, left, top, width, height, paragraphs, align=PP_ALIGN.LEFT, valign=MSO_ANCHOR.TOP):
     box = slide.shapes.add_textbox(left, top, width, height)
@@ -235,10 +298,10 @@ def add_textbox(slide, left, top, width, height, paragraphs, align=PP_ALIGN.LEFT
     frame.clear()
     frame.word_wrap = True
     frame.vertical_anchor = valign
-    frame.margin_left = 0
-    frame.margin_right = 0
-    frame.margin_top = 0
-    frame.margin_bottom = 0
+    frame.margin_left = Pt(2)
+    frame.margin_right = Pt(2)
+    frame.margin_top = Pt(0)
+    frame.margin_bottom = Pt(0)
 
     for idx, spec in enumerate(paragraphs):
         paragraph = frame.paragraphs[0] if idx == 0 else frame.add_paragraph()
@@ -251,7 +314,11 @@ def add_textbox(slide, left, top, width, height, paragraphs, align=PP_ALIGN.LEFT
         font.name = spec.get("font", "Noto Sans CJK SC")
         font.size = Pt(spec.get("size", 18))
         font.bold = spec.get("bold", True)
-        font.color.rgb = spec.get("color", COLORS["WHITE"])
+        text_color = spec.get("color", COLORS["WHITE"])
+        font.color.rgb = text_color
+        glow_size = spec.get("glow", 0)
+        if glow_size > 0:
+            add_glow_to_run(run, text_color, size=glow_size)
     return box
 
 
@@ -273,9 +340,10 @@ def add_tag(slide, text, canvas_name="widescreen"):
     shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, px(82), px(60), px(width_px), px(40))
     shape.fill.solid()
     shape.fill.fore_color.rgb = COLORS["CARD"]
-    shape.fill.transparency = 0.28
-    shape.line.color.rgb = COLORS["CYAN"]
-    shape.line.width = Pt(1)
+    shape.fill.transparency = 0.30
+    shape.line.color.rgb = RGBColor(255, 255, 255)
+    shape.line.width = Pt(0.8)
+    add_glow_to_shape(shape, COLORS["CYAN"], size=25000)
     add_textbox(slide, px(108), px(69), px(width_px - 40), px(24), [{"text": text, "size": 12, "bold": False, "color": COLORS["MUTED"]}])
 
 
@@ -290,30 +358,38 @@ def add_page_no(slide, num, canvas_name="widescreen"):
         add_textbox(slide, px(90), px(1350), px(320), px(24), [{"text": "XHS / CYBERPUNK COVER", "size": 11, "bold": False, "color": COLORS["SOFT"]}])
 
 
+# ---------------------------------------------------------------------------
+# Title blocks — fixed sizing to prevent text overflow
+# ---------------------------------------------------------------------------
+
 def add_title_block(slide, title_lines, subtitle, left_px=118, top_px=168, width_px=980):
+    """Render title lines + subtitle. Returns Y position after the entire block."""
     y = top_px
     for item in title_lines:
         pixel_size = int(item["size"])
-        size = max(26, int(pixel_size * 0.46))
-        height = max(66, int(pixel_size * 0.74))
+        pt_size = max(26, int(pixel_size * 0.46))
+        box_h = _box_height_for_pt(pt_size)
+        text_color = color(item["color"])
         add_textbox(
             slide,
             px(left_px),
             px(y),
             px(width_px),
-            px(height),
-            [{"text": item["text"], "size": size, "color": color(item["color"])}],
+            px(box_h),
+            [{"text": item["text"], "size": pt_size, "color": text_color, "glow": 54000}],
         )
-        y += int(pixel_size * 0.83)
+        y += _line_advance_for_pt(pt_size)
     if subtitle:
+        sub_h = 72
         add_textbox(
             slide,
             px(left_px + 4),
-            px(y + 18),
-            px(860),
-            px(90),
+            px(y + 10),
+            px(min(width_px, 860)),
+            px(sub_h),
             [{"text": " ".join(subtitle), "size": 18, "bold": False, "color": COLORS["WHITE"], "line_spacing": 1.05}],
         )
+        y += sub_h + 14
     return y
 
 
@@ -321,26 +397,29 @@ def add_title_block_vertical(slide, title_lines, subtitle, left_px=88, top_px=17
     y = top_px
     for item in title_lines:
         pixel_size = int(item["size"])
-        size = max(24, int(pixel_size * 0.38))
-        height = max(56, int(pixel_size * 0.62))
+        pt_size = max(24, int(pixel_size * 0.38))
+        box_h = _box_height_for_pt(pt_size)
+        text_color = color(item["color"])
         add_textbox(
             slide,
             px(left_px),
             px(y),
             px(width_px),
-            px(height),
-            [{"text": item["text"], "size": size, "color": color(item["color"])}],
+            px(box_h),
+            [{"text": item["text"], "size": pt_size, "color": text_color, "glow": 48000}],
         )
-        y += int(pixel_size * 0.66)
+        y += _line_advance_for_pt(pt_size)
     if subtitle:
+        sub_h = 60
         add_textbox(
             slide,
             px(left_px + 4),
-            px(y + 14),
+            px(y + 8),
             px(width_px - 20),
-            px(72),
+            px(sub_h),
             [{"text": " ".join(subtitle), "size": 15, "bold": False, "color": COLORS["WHITE"], "line_spacing": 1.02}],
         )
+        y += sub_h + 10
     return y
 
 
@@ -349,46 +428,60 @@ def add_title_block_lecture(slide, title_lines, subtitle, top_px=260, width_px=8
     center_left = (1080 - width_px) // 2
     for item in title_lines:
         pixel_size = int(item["size"])
-        size = max(24, int(pixel_size * 0.36))
-        height = max(54, int(pixel_size * 0.56))
+        pt_size = max(24, int(pixel_size * 0.36))
+        box_h = _box_height_for_pt(pt_size)
+        text_color = color(item["color"])
         add_textbox(
             slide,
             px(center_left),
             px(y),
             px(width_px),
-            px(height),
-            [{"text": item["text"], "size": size, "color": color(item["color"])}],
+            px(box_h),
+            [{"text": item["text"], "size": pt_size, "color": text_color, "glow": 46000}],
             align=PP_ALIGN.CENTER,
             valign=MSO_ANCHOR.MIDDLE,
         )
-        y += int(pixel_size * 0.58)
+        y += _line_advance_for_pt(pt_size)
     if subtitle:
+        sub_h = 60
         add_textbox(
             slide,
             px(center_left + 10),
-            px(y + 18),
+            px(y + 14),
             px(width_px - 20),
-            px(72),
+            px(sub_h),
             [{"text": " ".join(subtitle), "size": 15, "bold": False, "color": COLORS["WHITE"], "line_spacing": 1.05}],
             align=PP_ALIGN.CENTER,
             valign=MSO_ANCHOR.MIDDLE,
         )
-    return y + 60
+        y += sub_h + 16
+    return y
 
 
-def add_panel(slide, left_px, top_px, width_px, height_px, title, lines, accent_name, mono=False, title_size=18, body_size=16):
+# ---------------------------------------------------------------------------
+# Panel & chip helpers
+# ---------------------------------------------------------------------------
+
+def add_panel(slide, left_px, top_px, width_px, height_px, title, lines, accent_name, mono=False, title_size=18, body_size=16, canvas_name="widescreen"):
     accent = color(accent_name)
+    safe = SLIDE_SAFE.get(canvas_name, SLIDE_SAFE["widescreen"])
+    height_px = min(height_px, safe["max_y"] - top_px)
+    if height_px < 60:
+        height_px = 60
     shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, px(left_px), px(top_px), px(width_px), px(height_px))
     shape.fill.solid()
-    shape.fill.fore_color.rgb = COLORS["CARD_2"]
-    shape.fill.transparency = 0.12
-    shape.line.color.rgb = accent
-    shape.line.width = Pt(1.6)
-    add_textbox(slide, px(left_px + 28), px(top_px + 18), px(width_px - 56), px(34), [{"text": title, "size": title_size, "color": accent}])
+    shape.fill.fore_color.rgb = COLORS["CARD"]
+    shape.fill.transparency = 0.30
+    shape.line.color.rgb = RGBColor(255, 255, 255)
+    shape.line.width = Pt(1.2)
+    add_glow_to_shape(shape, accent, size=40000)
+    add_textbox(slide, px(left_px + 24), px(top_px + 14), px(width_px - 48), px(30), [{"text": title, "size": title_size, "color": accent}])
     body_font = "DejaVu Sans Mono" if mono else "Noto Sans CJK SC"
     effective_body_size = 14 if mono else body_size
-    paragraphs = [{"text": line, "size": effective_body_size, "bold": False, "color": COLORS["WHITE"], "font": body_font, "space_after": 5} for line in lines]
-    add_textbox(slide, px(left_px + 28), px(top_px + 58), px(width_px - 56), px(height_px - 72), paragraphs)
+    paragraphs = [{"text": line, "size": effective_body_size, "bold": False, "color": COLORS["WHITE"], "font": body_font, "space_after": 4} for line in lines]
+    body_top = top_px + 48
+    body_height = max(20, height_px - 56)
+    add_textbox(slide, px(left_px + 24), px(body_top), px(width_px - 48), px(body_height), paragraphs)
 
 
 def add_chip(slide, left_px, top_px, text, color_name):
@@ -396,112 +489,289 @@ def add_chip(slide, left_px, top_px, text, color_name):
     shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, px(left_px), px(top_px), px(230), px(50))
     shape.fill.solid()
     shape.fill.fore_color.rgb = COLORS["CARD"]
-    shape.fill.transparency = 0.12
-    shape.line.color.rgb = accent
-    shape.line.width = Pt(1.3)
+    shape.fill.transparency = 0.30
+    shape.line.color.rgb = RGBColor(255, 255, 255)
+    shape.line.width = Pt(1.0)
+    add_glow_to_shape(shape, accent, size=30000)
     add_textbox(slide, px(left_px + 16), px(top_px + 12), px(198), px(22), [{"text": text, "size": 13, "color": accent}], align=PP_ALIGN.CENTER)
 
 
+# ---------------------------------------------------------------------------
+# Widescreen renderers — dynamic positioning, boundary-aware
+# ---------------------------------------------------------------------------
+
 def render_cover(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), left_px=118, top_px=160, width_px=980)
-    for i, card in enumerate(spec.get("cards", [])[:1]):
-        add_panel(slide, 1260, 220 + i * 260, 500, 240, card["title"], card.get("lines", []), card["accent"])
-    for i, chip in enumerate(spec.get("chips", [])[:4]):
-        add_chip(slide, 120 + i * 255, 776, chip["text"], chip["color"])
-    add_textbox(slide, px(1400), px(728), px(340), px(150), [{"text": spec.get("ghost", ""), "size": 38, "color": COLORS["WHITE"]}], align=PP_ALIGN.CENTER)
-
-
-def render_cover_vertical(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), left_px=88, top_px=180, width_px=820)
+    safe = SLIDE_SAFE["widescreen"]
+    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), left_px=118, top_px=160, width_px=980)
+    # Card on the right, vertically centered relative to title
     cards = spec.get("cards", [])
     if cards:
-        card = cards[0]
-        add_panel(slide, 88, 980, 900, 180, card["title"], card.get("lines", []), card["accent"])
+        title_mid = (160 + bottom) // 2
+        card_y = _clamp(title_mid - 100, 200, safe["max_y"] - 250)
+        card_h = min(240, safe["max_y"] - card_y - 10)
+        add_panel(slide, 1280, card_y, 520, card_h, cards[0]["title"], cards[0].get("lines", []), cards[0]["accent"])
+    # Chips below title
+    chip_y = _clamp(bottom + 20, 500, safe["max_y"] - 60)
+    for i, chip in enumerate(spec.get("chips", [])[:4]):
+        add_chip(slide, 120 + i * 255, chip_y, chip["text"], chip["color"])
+    ghost = spec.get("ghost", "")
+    if ghost:
+        ghost_y = _clamp(bottom - 60, 300, safe["max_y"] - 80)
+        add_textbox(slide, px(1400), px(ghost_y), px(340), px(100), [{"text": ghost, "size": 36, "color": COLORS["WHITE"], "glow": 30000}], align=PP_ALIGN.CENTER)
+
+
+def render_poster_cards(slide, spec):
+    safe = SLIDE_SAFE["widescreen"]
+    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=940)
+    cards = spec.get("cards", [])
+    base_y = _clamp(bottom + 50, 440, 660)
+    card_h = min(220, safe["max_y"] - base_y - 20)
+    positions = [(118, base_y + 20), (690, base_y), (1262, base_y + 20)]
+    for card, (x, y) in zip(cards[:3], positions):
+        add_panel(slide, x, y, 520, card_h, card["title"], card.get("lines", []), card["accent"])
+
+
+def render_flow(slide, spec):
+    safe = SLIDE_SAFE["widescreen"]
+    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=940)
+    nodes = spec.get("nodes", [])
+    base_y = _clamp(bottom + 40, 460, 600)
+    node_w = 330
+    gap = 40
+    total = len(nodes[:4]) * node_w + max(0, len(nodes[:4]) - 1) * gap
+    start_x = max(96, (1920 - total) // 2)
+    arrows = ["CYAN", "PINK", "YELLOW"]
+    node_h = min(148, safe["max_y"] - base_y - 20)
+    for i, (node, x_off) in enumerate(zip(nodes[:4], range(len(nodes[:4])))):
+        x = start_x + x_off * (node_w + gap)
+        add_panel(slide, x, base_y, node_w, node_h, node["title"], [node["body"]], node["accent"])
+        if i < min(3, len(nodes[:4]) - 1):
+            arrow = slide.shapes.add_shape(MSO_SHAPE.CHEVRON, px(x + node_w + 6), px(base_y + node_h // 2 - 20), px(28), px(40))
+            arrow.fill.solid()
+            arrow.fill.fore_color.rgb = color(arrows[i])
+            arrow.line.color.rgb = color(arrows[i])
+
+
+def render_grid_four(slide, spec):
+    safe = SLIDE_SAFE["widescreen"]
+    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=980)
+    cards = spec.get("cards", [])
+    base_y = _clamp(bottom + 40, 460, 620)
+    card_w = min(830, (1920 - 118 - 118 - 40) // 2)
+    card_h = min(180, (safe["max_y"] - base_y - 20) // 2 - 10)
+    col2_x = 118 + card_w + 40
+    positions = [(118, base_y), (col2_x, base_y), (118, base_y + card_h + 14), (col2_x, base_y + card_h + 14)]
+    for card, (x, y) in zip(cards[:4], positions):
+        add_panel(slide, x, y, card_w, card_h, card["title"], card.get("lines", []), card["accent"])
+
+
+def render_split(slide, spec):
+    safe = SLIDE_SAFE["widescreen"]
+    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=980)
+    base_y = _clamp(bottom + 40, 460, 620)
+    panel_w = min(760, (1920 - 118 - 80 - 40) // 2)
+    panel_h = min(250, safe["max_y"] - base_y - 20)
+    left = spec["left"]
+    right = spec["right"]
+    add_panel(slide, 118, base_y, panel_w, panel_h, left["title"], left.get("lines", []), left["accent"])
+    add_panel(slide, 118 + panel_w + 40, base_y, panel_w, panel_h, right["title"], right.get("lines", []), right["accent"])
+
+
+def render_code_mix(slide, spec):
+    safe = SLIDE_SAFE["widescreen"]
+    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=960)
+    base_y = _clamp(bottom + 30, 420, 560)
+    code_h = min(300, safe["max_y"] - base_y - 20)
+    add_panel(slide, 118, base_y, 740, code_h, "目录 / 命令", spec.get("code", []), "CYAN", mono=True)
+    cards = spec.get("cards", [])
+    card_x = 920
+    card_w = min(700, 1920 - card_x - 50)
+    card_h = min(110, (safe["max_y"] - base_y - 20) // max(1, len(cards[:3])) - 10)
+    for idx, card in enumerate(cards[:3]):
+        cy = base_y + idx * (card_h + 12)
+        add_panel(slide, card_x, cy, card_w, card_h, card["title"], card.get("lines", []), card["accent"])
+
+
+def render_timeline(slide, spec):
+    safe = SLIDE_SAFE["widescreen"]
+    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=960)
+    steps = spec.get("steps", [])
+    if not steps:
+        return
+    line_y = _clamp(bottom + 80, 600, 780)
+    # Horizontal line
+    line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, px(160), px(line_y), px(1560), px(4))
+    line.fill.solid()
+    line.fill.fore_color.rgb = COLORS["CYAN"]
+    line.fill.transparency = 0.18
+    line.line.fill.background()
+    n = len(steps[:5])
+    gap = 1560 // max(1, n - 1) if n > 1 else 0
+    xs = [210 + i * gap for i in range(n)]
+    dot_y = line_y - 22
+    for si, (step, x) in enumerate(zip(steps[:5], xs)):
+        accent = color(step["accent"])
+        dot = slide.shapes.add_shape(MSO_SHAPE.OVAL, px(x - 22), px(dot_y), px(44), px(44))
+        dot.fill.solid()
+        dot.fill.fore_color.rgb = accent
+        dot.line.color.rgb = accent
+        add_textbox(slide, px(x - 20), px(dot_y + 10), px(40), px(18), [{"text": step["num"], "size": 11, "color": COLORS["CARD_2"]}], align=PP_ALIGN.CENTER)
+        label_y = dot_y - 90 if si % 2 == 0 else line_y + 24
+        label_y = _clamp(label_y, bottom + 20, safe["max_y"] - 90)
+        add_panel(slide, x - 115, label_y, 230, 78, step["label"], [], step["accent"])
+
+
+def render_wide_stack(slide, spec):
+    safe = SLIDE_SAFE["widescreen"]
+    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=980)
+    rows = spec.get("rows", [])
+    base_y = _clamp(bottom + 30, 440, 580)
+    row_h = min(90, (safe["max_y"] - base_y - 10) // max(1, len(rows[:4])) - 6)
+    for i, row in enumerate(rows[:4]):
+        add_panel(slide, 118, base_y + i * (row_h + 8), 1680, row_h, row["title"], [row["body"]], row["accent"])
+
+
+def render_statement(slide, spec):
+    safe = SLIDE_SAFE["widescreen"]
+    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), left_px=150, top_px=220, width_px=930)
+    lines = spec.get("lines", [])
+    base_y = _clamp(bottom + 50, 500, safe["max_y"] - 80)
+    n = len(lines[:4])
+    if n == 0:
+        return
+    item_w = min(300, (1600) // n)
+    total_w = n * item_w
+    start_x = max(120, (1920 - total_w) // 2)
+    for i, item in enumerate(lines[:4]):
+        add_textbox(slide, px(start_x + i * item_w), px(base_y), px(item_w - 10), px(70), [{"text": item["text"], "size": 32, "color": color(item["color"])}], align=PP_ALIGN.CENTER)
+
+
+def render_ending(slide, spec):
+    add_title_block(slide, spec["title"], spec.get("subtitle", []), left_px=150, top_px=250, width_px=980)
+    add_textbox(slide, px(360), px(860), px(1200), px(30), [{"text": spec.get("footer", ""), "size": 12, "bold": False, "color": COLORS["MUTED"]}], align=PP_ALIGN.CENTER)
+
+
+# ---------------------------------------------------------------------------
+# XHS vertical renderers
+# ---------------------------------------------------------------------------
+
+def render_cover_vertical(slide, spec):
+    safe = SLIDE_SAFE["xhs-vertical"]
+    bottom = add_title_block_vertical(slide, spec["title"], spec.get("subtitle", []), left_px=88, top_px=180, width_px=820)
     chips = spec.get("chips", [])
+    chip_start_y = _clamp(bottom + 40, 400, safe["max_y"] - 200)
     for idx, chip in enumerate(chips[:4]):
         row = idx // 2
         col = idx % 2
-        add_chip(slide, 88 + col * 300, 760 + row * 74, chip["text"], chip["color"])
-    add_textbox(slide, px(720), px(1180), px(240), px(120), [{"text": spec.get("ghost", ""), "size": 34, "color": COLORS["WHITE"]}], align=PP_ALIGN.CENTER)
+        add_chip(slide, 88 + col * 300, chip_start_y + row * 74, chip["text"], chip["color"])
+    cards = spec.get("cards", [])
+    if cards:
+        card = cards[0]
+        card_y = _clamp(chip_start_y + len(chips[:4]) * 74 + 30, bottom + 100, safe["max_y"] - 200)
+        card_h = min(180, safe["max_y"] - card_y - 20)
+        add_panel(slide, 88, card_y, 900, card_h, card["title"], card.get("lines", []), card["accent"])
+    ghost = spec.get("ghost", "")
+    if ghost:
+        ghost_y = safe["max_y"] - 160
+        add_textbox(slide, px(720), px(ghost_y), px(240), px(100), [{"text": ghost, "size": 34, "color": COLORS["WHITE"], "glow": 28000}], align=PP_ALIGN.CENTER)
 
 
 def render_poster_cards_vertical(slide, spec):
+    safe = SLIDE_SAFE["xhs-vertical"]
     bottom = add_title_block_vertical(slide, spec["title"], spec.get("subtitle", []), left_px=88, top_px=176, width_px=900)
-    start_y = max(520, bottom + 120)
+    start_y = _clamp(bottom + 40, 400, 600)
+    card_h = min(150, (safe["max_y"] - start_y - 10) // max(1, len(spec.get("cards", [])[:3])) - 10)
     for idx, card in enumerate(spec.get("cards", [])[:3]):
-        add_panel(slide, 88, start_y + idx * 180, 900, 150, card["title"], card.get("lines", []), card["accent"])
+        add_panel(slide, 88, start_y + idx * (card_h + 14), 900, card_h, card["title"], card.get("lines", []), card["accent"])
 
 
 def render_flow_vertical(slide, spec):
+    safe = SLIDE_SAFE["xhs-vertical"]
     bottom = add_title_block_vertical(slide, spec["title"], spec.get("subtitle", []), left_px=88, top_px=176, width_px=900)
-    start_y = max(500, bottom + 110)
+    start_y = _clamp(bottom + 40, 380, 580)
     nodes = spec.get("nodes", [])[:4]
+    node_h = min(118, (safe["max_y"] - start_y - 10) // max(1, len(nodes)) - 30)
     for idx, node in enumerate(nodes):
-        y = start_y + idx * 170
-        add_panel(slide, 130, y, 820, 118, node["title"], [node["body"]], node["accent"])
+        y = start_y + idx * (node_h + 40)
+        add_panel(slide, 130, y, 820, node_h, node["title"], [node["body"]], node["accent"])
         if idx < len(nodes) - 1:
             add_textbox(
                 slide,
                 px(490),
-                px(y + 120),
+                px(y + node_h + 4),
                 px(100),
-                px(36),
-                [{"text": "▼", "size": 26, "color": color(nodes[idx + 1]["accent"])}],
+                px(30),
+                [{"text": "▼", "size": 22, "color": color(nodes[idx + 1]["accent"])}],
                 align=PP_ALIGN.CENTER,
             )
 
 
 def render_grid_four_vertical(slide, spec):
+    safe = SLIDE_SAFE["xhs-vertical"]
     bottom = add_title_block_vertical(slide, spec["title"], spec.get("subtitle", []), left_px=88, top_px=176, width_px=900)
-    start_y = max(500, bottom + 110)
-    positions = [(88, start_y), (550, start_y), (88, start_y + 220), (550, start_y + 220)]
+    start_y = _clamp(bottom + 40, 400, 600)
+    card_w = (900 - 20) // 2
+    card_h = min(180, (safe["max_y"] - start_y - 10) // 2 - 10)
+    positions = [(88, start_y), (88 + card_w + 20, start_y), (88, start_y + card_h + 14), (88 + card_w + 20, start_y + card_h + 14)]
     for card, (x, y) in zip(spec.get("cards", [])[:4], positions):
-        add_panel(slide, x, y, 442, 180, card["title"], card.get("lines", []), card["accent"])
+        add_panel(slide, x, y, card_w, card_h, card["title"], card.get("lines", []), card["accent"])
 
 
 def render_split_vertical(slide, spec):
+    safe = SLIDE_SAFE["xhs-vertical"]
     bottom = add_title_block_vertical(slide, spec["title"], spec.get("subtitle", []), left_px=88, top_px=176, width_px=900)
-    start_y = max(560, bottom + 130)
-    left = spec["left"]
-    right = spec["right"]
-    add_panel(slide, 88, start_y, 900, 180, left["title"], left.get("lines", []), left["accent"])
-    add_panel(slide, 88, start_y + 220, 900, 180, right["title"], right.get("lines", []), right["accent"])
+    start_y = _clamp(bottom + 40, 420, 650)
+    panel_h = min(180, (safe["max_y"] - start_y - 10) // 2 - 10)
+    add_panel(slide, 88, start_y, 900, panel_h, spec["left"]["title"], spec["left"].get("lines", []), spec["left"]["accent"])
+    add_panel(slide, 88, start_y + panel_h + 14, 900, panel_h, spec["right"]["title"], spec["right"].get("lines", []), spec["right"]["accent"])
 
 
 def render_code_mix_vertical(slide, spec):
+    safe = SLIDE_SAFE["xhs-vertical"]
     bottom = add_title_block_vertical(slide, spec["title"], spec.get("subtitle", []), left_px=88, top_px=176, width_px=900)
-    code_y = max(470, bottom + 100)
-    add_panel(slide, 88, code_y, 900, 220, "目录 / 命令", spec.get("code", []), "CYAN", mono=True)
-    for idx, card in enumerate(spec.get("cards", [])[:3]):
-        add_panel(slide, 88, code_y + 250 + idx * 124, 900, 108, card["title"], card.get("lines", []), card["accent"])
+    code_y = _clamp(bottom + 30, 380, 560)
+    code_h = min(220, safe["max_y"] - code_y - 10)
+    add_panel(slide, 88, code_y, 900, code_h, "目录 / 命令", spec.get("code", []), "CYAN", mono=True)
+    cards = spec.get("cards", [])
+    card_h = min(108, (safe["max_y"] - code_y - code_h - 10) // max(1, len(cards[:3])) - 8)
+    for idx, card in enumerate(cards[:3]):
+        cy = code_y + code_h + 14 + idx * (card_h + 10)
+        add_panel(slide, 88, cy, 900, card_h, card["title"], card.get("lines", []), card["accent"])
 
 
 def render_timeline_vertical(slide, spec):
+    safe = SLIDE_SAFE["xhs-vertical"]
     bottom = add_title_block_vertical(slide, spec["title"], spec.get("subtitle", []), left_px=88, top_px=176, width_px=900)
-    start_y = max(520, bottom + 110)
-    for idx, step in enumerate(spec.get("steps", [])[:5]):
+    start_y = _clamp(bottom + 40, 400, 600)
+    steps = spec.get("steps", [])[:5]
+    step_h = min(96, (safe["max_y"] - start_y - 10) // max(1, len(steps)) - 10)
+    for idx, step in enumerate(steps):
         label = f"{step['num']}  {step['label']}"
-        add_panel(slide, 140, start_y + idx * 150, 800, 96, label, [], step["accent"])
+        add_panel(slide, 140, start_y + idx * (step_h + 12), 800, step_h, label, [], step["accent"])
 
 
 def render_wide_stack_vertical(slide, spec):
+    safe = SLIDE_SAFE["xhs-vertical"]
     bottom = add_title_block_vertical(slide, spec["title"], spec.get("subtitle", []), left_px=88, top_px=176, width_px=900)
-    start_y = max(500, bottom + 110)
-    for idx, row in enumerate(spec.get("rows", [])[:4]):
-        add_panel(slide, 88, start_y + idx * 150, 900, 112, row["title"], [row["body"]], row["accent"])
+    start_y = _clamp(bottom + 40, 400, 600)
+    rows = spec.get("rows", [])[:4]
+    row_h = min(112, (safe["max_y"] - start_y - 10) // max(1, len(rows)) - 8)
+    for idx, row in enumerate(rows):
+        add_panel(slide, 88, start_y + idx * (row_h + 10), 900, row_h, row["title"], [row["body"]], row["accent"])
 
 
 def render_statement_vertical(slide, spec):
+    safe = SLIDE_SAFE["xhs-vertical"]
     bottom = add_title_block_vertical(slide, spec["title"], spec.get("subtitle", []), left_px=88, top_px=220, width_px=900)
-    start_y = min(980, bottom + 120)
+    start_y = _clamp(bottom + 50, 500, safe["max_y"] - 200)
     for idx, item in enumerate(spec.get("lines", [])[:4]):
         add_textbox(
             slide,
-            px(180),
-            px(start_y + idx * 74),
-            px(720),
+            px(120),
+            px(start_y + idx * 60),
+            px(840),
             px(48),
-            [{"text": item["text"], "size": 28, "color": color(item["color"])}],
+            [{"text": item["text"], "size": 26, "color": color(item["color"])}],
             align=PP_ALIGN.CENTER,
         )
 
@@ -519,84 +789,114 @@ def render_ending_vertical(slide, spec):
     )
 
 
+# ---------------------------------------------------------------------------
+# Lecture vertical renderers
+# ---------------------------------------------------------------------------
+
 def render_cover_lecture(slide, spec):
+    safe = SLIDE_SAFE["lecture-vertical"]
     bottom = add_title_block_lecture(slide, spec["title"], spec.get("subtitle", []), top_px=330, width_px=840)
     chips = spec.get("chips", [])
+    chip_y = _clamp(bottom + 30, 600, safe["max_y"] - 200)
     for idx, chip in enumerate(chips[:4]):
         row = idx // 2
         col = idx % 2
-        add_chip(slide, 152 + col * 392, 760 + row * 82, chip["text"], chip["color"])
+        add_chip(slide, 152 + col * 392, chip_y + row * 82, chip["text"], chip["color"])
     cards = spec.get("cards", [])
     if cards:
-        add_panel(slide, 120, 1080, 840, 190, cards[0]["title"], cards[0].get("lines", []), cards[0]["accent"], body_size=15)
+        card_y = _clamp(chip_y + len(chips[:4]) * 82 + 30, bottom + 100, safe["max_y"] - 200)
+        card_h = min(190, safe["max_y"] - card_y - 20)
+        add_panel(slide, 120, card_y, 840, card_h, cards[0]["title"], cards[0].get("lines", []), cards[0]["accent"], body_size=15)
 
 
 def render_poster_cards_lecture(slide, spec):
+    safe = SLIDE_SAFE["lecture-vertical"]
     bottom = add_title_block_lecture(slide, spec["title"], spec.get("subtitle", []), top_px=260, width_px=860)
-    start_y = max(860, bottom + 220)
-    for idx, card in enumerate(spec.get("cards", [])[:3]):
-        add_panel(slide, 118, start_y + idx * 174, 844, 132, card["title"], card.get("lines", []), card["accent"], body_size=15)
+    start_y = _clamp(bottom + 50, 600, 900)
+    cards = spec.get("cards", [])[:3]
+    card_h = min(132, (safe["max_y"] - start_y - 10) // max(1, len(cards)) - 10)
+    for idx, card in enumerate(cards):
+        add_panel(slide, 118, start_y + idx * (card_h + 14), 844, card_h, card["title"], card.get("lines", []), card["accent"], body_size=15)
 
 
 def render_grid_four_lecture(slide, spec):
+    safe = SLIDE_SAFE["lecture-vertical"]
     bottom = add_title_block_lecture(slide, spec["title"], spec.get("subtitle", []), top_px=260, width_px=860)
-    start_y = max(820, bottom + 190)
-    positions = [(108, start_y), (548, start_y), (108, start_y + 220), (548, start_y + 220)]
+    start_y = _clamp(bottom + 50, 580, 860)
+    card_w = (844 - 20) // 2
+    card_h = min(164, (safe["max_y"] - start_y - 10) // 2 - 10)
+    positions = [(108, start_y), (108 + card_w + 20, start_y), (108, start_y + card_h + 14), (108 + card_w + 20, start_y + card_h + 14)]
     for card, (x, y) in zip(spec.get("cards", [])[:4], positions):
-        add_panel(slide, x, y, 424, 164, card["title"], card.get("lines", []), card["accent"], body_size=14)
+        add_panel(slide, x, y, card_w, card_h, card["title"], card.get("lines", []), card["accent"], body_size=14)
 
 
 def render_split_lecture(slide, spec):
+    safe = SLIDE_SAFE["lecture-vertical"]
     bottom = add_title_block_lecture(slide, spec["title"], spec.get("subtitle", []), top_px=260, width_px=860)
-    start_y = max(840, bottom + 210)
-    add_panel(slide, 118, start_y, 844, 184, spec["left"]["title"], spec["left"].get("lines", []), spec["left"]["accent"], body_size=14)
-    add_panel(slide, 118, start_y + 224, 844, 184, spec["right"]["title"], spec["right"].get("lines", []), spec["right"]["accent"], body_size=14)
+    start_y = _clamp(bottom + 50, 600, 900)
+    panel_h = min(184, (safe["max_y"] - start_y - 10) // 2 - 10)
+    add_panel(slide, 118, start_y, 844, panel_h, spec["left"]["title"], spec["left"].get("lines", []), spec["left"]["accent"], body_size=14)
+    add_panel(slide, 118, start_y + panel_h + 14, 844, panel_h, spec["right"]["title"], spec["right"].get("lines", []), spec["right"]["accent"], body_size=14)
 
 
 def render_code_mix_lecture(slide, spec):
+    safe = SLIDE_SAFE["lecture-vertical"]
     bottom = add_title_block_lecture(slide, spec["title"], spec.get("subtitle", []), top_px=260, width_px=860)
-    start_y = max(800, bottom + 180)
-    add_panel(slide, 118, start_y, 844, 250, "目录 / 命令", spec.get("code", []), "CYAN", mono=True)
-    for idx, card in enumerate(spec.get("cards", [])[:3]):
-        add_panel(slide, 118, start_y + 288 + idx * 150, 844, 128, card["title"], card.get("lines", []), card["accent"], body_size=13)
+    start_y = _clamp(bottom + 40, 560, 820)
+    code_h = min(250, safe["max_y"] - start_y - 10)
+    add_panel(slide, 118, start_y, 844, code_h, "目录 / 命令", spec.get("code", []), "CYAN", mono=True)
+    cards = spec.get("cards", [])
+    card_h = min(128, (safe["max_y"] - start_y - code_h - 10) // max(1, len(cards[:3])) - 10)
+    for idx, card in enumerate(cards[:3]):
+        cy = start_y + code_h + 14 + idx * (card_h + 10)
+        add_panel(slide, 118, cy, 844, card_h, card["title"], card.get("lines", []), card["accent"], body_size=13)
 
 
 def render_flow_lecture(slide, spec):
+    safe = SLIDE_SAFE["lecture-vertical"]
     bottom = add_title_block_lecture(slide, spec["title"], spec.get("subtitle", []), top_px=260, width_px=860)
-    start_y = max(840, bottom + 210)
+    start_y = _clamp(bottom + 50, 600, 900)
     nodes = spec.get("nodes", [])[:4]
+    node_h = min(106, (safe["max_y"] - start_y - 10) // max(1, len(nodes)) - 30)
     for idx, node in enumerate(nodes):
-        y = start_y + idx * 170
-        add_panel(slide, 162, y, 756, 106, node["title"], [node["body"]], node["accent"], body_size=14)
+        y = start_y + idx * (node_h + 36)
+        add_panel(slide, 162, y, 756, node_h, node["title"], [node["body"]], node["accent"], body_size=14)
         if idx < len(nodes) - 1:
-            add_textbox(slide, px(500), px(y + 110), px(80), px(36), [{"text": "▼", "size": 20, "color": color(nodes[idx + 1]["accent"])}], align=PP_ALIGN.CENTER)
+            add_textbox(slide, px(500), px(y + node_h + 4), px(80), px(28), [{"text": "▼", "size": 18, "color": color(nodes[idx + 1]["accent"])}], align=PP_ALIGN.CENTER)
 
 
 def render_timeline_lecture(slide, spec):
+    safe = SLIDE_SAFE["lecture-vertical"]
     bottom = add_title_block_lecture(slide, spec["title"], spec.get("subtitle", []), top_px=260, width_px=860)
-    start_y = max(860, bottom + 220)
-    for idx, step in enumerate(spec.get("steps", [])[:5]):
-        add_panel(slide, 128, start_y + idx * 132, 824, 92, f"{step['num']}  {step['label']}", [], step["accent"], body_size=14)
+    start_y = _clamp(bottom + 50, 600, 900)
+    steps = spec.get("steps", [])[:5]
+    step_h = min(92, (safe["max_y"] - start_y - 10) // max(1, len(steps)) - 10)
+    for idx, step in enumerate(steps):
+        add_panel(slide, 128, start_y + idx * (step_h + 12), 824, step_h, f"{step['num']}  {step['label']}", [], step["accent"], body_size=14)
 
 
 def render_wide_stack_lecture(slide, spec):
+    safe = SLIDE_SAFE["lecture-vertical"]
     bottom = add_title_block_lecture(slide, spec["title"], spec.get("subtitle", []), top_px=260, width_px=860)
-    start_y = max(840, bottom + 200)
-    for idx, row in enumerate(spec.get("rows", [])[:4]):
-        add_panel(slide, 118, start_y + idx * 142, 844, 112, row["title"], [row["body"]], row["accent"], body_size=14)
+    start_y = _clamp(bottom + 50, 600, 900)
+    rows = spec.get("rows", [])[:4]
+    row_h = min(112, (safe["max_y"] - start_y - 10) // max(1, len(rows)) - 8)
+    for idx, row in enumerate(rows):
+        add_panel(slide, 118, start_y + idx * (row_h + 10), 844, row_h, row["title"], [row["body"]], row["accent"], body_size=14)
 
 
 def render_statement_lecture(slide, spec):
+    safe = SLIDE_SAFE["lecture-vertical"]
     bottom = add_title_block_lecture(slide, spec["title"], spec.get("subtitle", []), top_px=280, width_px=860)
-    line_y = max(1080, bottom + 260)
+    line_y = _clamp(bottom + 60, 700, safe["max_y"] - 200)
     for idx, item in enumerate(spec.get("lines", [])[:4]):
         add_textbox(
             slide,
-            px(180),
-            px(line_y + idx * 68),
-            px(720),
+            px(140),
+            px(line_y + idx * 60),
+            px(800),
             px(42),
-            [{"text": item["text"], "size": 28, "color": color(item["color"])}],
+            [{"text": item["text"], "size": 26, "color": color(item["color"])}],
             align=PP_ALIGN.CENTER,
             valign=MSO_ANCHOR.MIDDLE,
         )
@@ -609,92 +909,16 @@ def render_ending_lecture(slide, spec):
         px(160),
         px(1180),
         px(760),
-        px(120),
+        px(80),
         [{"text": spec.get("footer", ""), "size": 14, "bold": False, "color": COLORS["MUTED"], "line_spacing": 1.05}],
         align=PP_ALIGN.CENTER,
         valign=MSO_ANCHOR.MIDDLE,
     )
 
 
-def render_poster_cards(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=940)
-    positions = [(118, 610, 500, 214), (705, 530, 500, 214), (1292, 610, 500, 214)]
-    for card, pos in zip(spec.get("cards", []), positions):
-        add_panel(slide, *pos, card["title"], card.get("lines", []), card["accent"])
-
-
-def render_flow(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=940)
-    x_positions = [96, 534, 972, 1410]
-    arrows = ["CYAN", "PINK", "YELLOW"]
-    for i, (node, x) in enumerate(zip(spec.get("nodes", []), x_positions)):
-        add_panel(slide, x, 590, 330, 148, node["title"], [node["body"]], node["accent"])
-        if i < min(3, len(spec.get("nodes", [])) - 1):
-            arrow = slide.shapes.add_shape(MSO_SHAPE.CHEVRON, px(x + 348), px(642), px(52), px(40))
-            arrow.fill.solid()
-            arrow.fill.fore_color.rgb = color(arrows[i])
-            arrow.line.color.rgb = color(arrows[i])
-
-
-def render_grid_four(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=980)
-    positions = [(118, 540), (975, 540), (118, 792), (975, 792)]
-    for card, (x, y) in zip(spec.get("cards", []), positions):
-        add_panel(slide, x, y, 830, 168, card["title"], card.get("lines", []), card["accent"])
-
-
-def render_split(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=980)
-    left = spec["left"]
-    right = spec["right"]
-    add_panel(slide, 118, 560, 760, 240, left["title"], left.get("lines", []), left["accent"])
-    add_panel(slide, 1040, 466, 760, 240, right["title"], right.get("lines", []), right["accent"])
-
-
-def render_code_mix(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=960)
-    add_panel(slide, 118, 500, 740, 300, "目录 / 命令", spec.get("code", []), "CYAN", mono=True)
-    positions = [(1020, 480, 700, 110), (1100, 620, 700, 110), (1020, 760, 700, 110)]
-    for card, pos in zip(spec.get("cards", []), positions):
-        add_panel(slide, *pos, card["title"], card.get("lines", []), card["accent"])
-
-
-def render_timeline(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=960)
-    line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, px(160), px(770), px(1560), px(4))
-    line.fill.solid()
-    line.fill.fore_color.rgb = COLORS["CYAN"]
-    line.fill.transparency = 0.18
-    line.line.fill.background()
-    xs = [210, 570, 930, 1290, 1650]
-    ys = [630, 720, 630, 720, 630]
-    for step, x, y in zip(spec.get("steps", []), xs, ys):
-        accent = color(step["accent"])
-        dot = slide.shapes.add_shape(MSO_SHAPE.OVAL, px(x - 22), px(748), px(44), px(44))
-        dot.fill.solid()
-        dot.fill.fore_color.rgb = accent
-        dot.line.color.rgb = accent
-        add_textbox(slide, px(x - 20), px(758), px(40), px(18), [{"text": step["num"], "size": 11, "color": COLORS["CARD_2"]}], align=PP_ALIGN.CENTER)
-        add_panel(slide, x - 115, y, 230, 90, step["label"], [], step["accent"])
-
-
-def render_wide_stack(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), width_px=980)
-    for i, row in enumerate(spec.get("rows", [])):
-        add_panel(slide, 118, 500 + i * 105, 1680, 82, row["title"], [row["body"]], row["accent"])
-
-
-def render_statement(slide, spec):
-    bottom = add_title_block(slide, spec["title"], spec.get("subtitle", []), left_px=150, top_px=220, width_px=930)
-    x_positions = [240, 560, 930, 1230]
-    for item, x in zip(spec.get("lines", []), x_positions):
-        add_textbox(slide, px(x), px(bottom + 120), px(250), px(70), [{"text": item["text"], "size": 32, "color": color(item["color"])}], align=PP_ALIGN.CENTER)
-
-
-def render_ending(slide, spec):
-    add_title_block(slide, spec["title"], spec.get("subtitle", []), left_px=150, top_px=250, width_px=980)
-    add_textbox(slide, px(360), px(860), px(1200), px(26), [{"text": spec.get("footer", ""), "size": 12, "bold": False, "color": COLORS["MUTED"]}], align=PP_ALIGN.CENTER)
-
+# ---------------------------------------------------------------------------
+# Renderer registries
+# ---------------------------------------------------------------------------
 
 RENDERERS = {
     "cover": render_cover,
@@ -735,6 +959,10 @@ LECTURE_VERTICAL_RENDERERS = {
     "ending": render_ending_lecture,
 }
 
+
+# ---------------------------------------------------------------------------
+# Main generation pipeline
+# ---------------------------------------------------------------------------
 
 def make_presentation(spec: dict, output_path: Path, asset_dir: Path) -> None:
     canvas = get_canvas(spec)

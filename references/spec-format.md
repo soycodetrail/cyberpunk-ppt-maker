@@ -110,6 +110,7 @@ Use these symbolic values:
 - `RED`
 - `PURPLE`
 - `LIME`
+- `TEAL`
 
 ## Practical Guidance
 
