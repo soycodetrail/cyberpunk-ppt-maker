@@ -35,7 +35,6 @@ env/
 # Output files
 *.pptx
 *.pdf
-*.png
 slide_*.png
 generated_cyberpunk_assets/
 slide_pngs/
