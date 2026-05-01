@@ -26,7 +26,10 @@
 git clone https://github.com/soycodetrail/cyberpunk-ppt-maker.git \
   ~/.claude/skills/cyberpunk-ppt-maker
 
-# 方式二：如果已有 skills 管理工具，按其方式安装
+# 方式二：使用npx安装
+npx skills add https://github.com/soycodetrail/cyberpunk-ppt-maker.git
+
+# 方式三：如果已有 skills 管理工具，按其方式安装
 ```
 
 ### 2. 安装依赖
@@ -284,6 +287,8 @@ SoyCodeTrail
 
 
 - 微信
-![image-20260430232114849](docs/images/wechat.png)
+  ![image-20260430232114849](docs/images/wechat.png)
+
 - 小红书
-![image-20260430232131575](docs/images/xiaohongshu.png)
+
+  ![image-20260430232131575](docs/images/xiaohongshu.png)
