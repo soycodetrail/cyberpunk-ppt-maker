@@ -17,10 +17,10 @@
 
 ## 2. 效果展示
 
-详细见：[飞书学习文档](https://zcn93dhcbthz.feishu.cn/wiki/TETgwJnBqiTpCUkb54scTP97nth)
+详细见：[视频/笔记封面和PPT生成讲解](https://zcn93dhcbthz.feishu.cn/docx/TS8Dd8LvioR2e6xut5RcmsHfnzD)
 
 **ppt生成效果：**
-  ![image-ppt](docs/images/ppt-effect.png)
+ ![image-ppt](docs/images/ppt-effect.png)
 
 **封面生成效果：**
   ![image-cover](docs/images/cover-effect.png)
