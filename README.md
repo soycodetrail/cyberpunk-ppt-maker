@@ -4,7 +4,7 @@
 
 纯黑背景 + 霓虹光晕 + 网格纹理 + 渐变面板。所有文字保持可编辑，视觉元素自动生成。
 
-## 这个 Skill 能做什么
+## 1. 这个 Skill 能做什么
 
 | 能力 | 说明 |
 |------|------|
@@ -15,9 +15,19 @@
 
 ---
 
-## 快速开始
+## 2. 效果展示
 
-### 1. 安装 Skill
+详细见：[飞书学习文档](https://zcn93dhcbthz.feishu.cn/wiki/TETgwJnBqiTpCUkb54scTP97nth)
+
+**ppt生成效果：**
+  ![image-ppt](docs/images/ppt-effect.png)
+
+**封面生成效果：**
+  ![image-cover](docs/images/cover-effect.png)
+
+## 3. 快速开始
+
+### 3.1 安装 Skill
 
 将本项目放到 Claude Code 的 skills 目录下：
 
@@ -32,7 +42,7 @@ npx skills add https://github.com/soycodetrail/cyberpunk-ppt-maker.git
 # 方式三：如果已有 skills 管理工具，按其方式安装
 ```
 
-### 2. 安装依赖
+### 3.2 安装依赖
 
 ```bash
 pip install python-pptx pillow
@@ -54,15 +64,15 @@ pip install python-pptx pillow
 | macOS | `brew install font-noto-sans-cjk-sc` 或系统已自带中文字体 |
 | Windows | 下载 [Google Noto CJK 字体](https://fonts.google.com/noto/fonts) 并双击安装，或安装系统自带的中文字体包 |
 
-### 3. 在 Claude Code 中使用
+### 3.3 在 Claude Code 中使用
 
 安装后，直接在 Claude Code 对话中描述你的需求即可。以下是一些典型用法：
 
 ---
 
-## 使用示例
+## 4. 使用示例
 
-### 生成一套 PPT 演示文稿
+### 4.1 生成一套 PPT 演示文稿
 
 ```
 帮我生成一个关于"AI Agent 开发入门"的赛博朋克风格 PPT，10页左右，
@@ -75,7 +85,7 @@ Claude 会自动：
 3. 产出可编辑的 PPTX 文件
 4. 如果需要，同时导出 PDF 和 PNG
 
-### 生成视频封面
+### 4.2 生成视频封面
 
 ```
 帮我做一个抖音视频封面，主题是"Python 爬虫实战"，
@@ -84,7 +94,7 @@ Claude 会自动：
 
 Claude 会自动选择 `lecture-vertical` 画布，生成单页封面并导出 PNG。
 
-### 生成小红书封面
+### 4.3 生成小红书封面
 
 ```
 做一个赛博朋克风格的小红书封面，主题是"本地部署大模型"，
@@ -93,7 +103,7 @@ Claude 会自动选择 `lecture-vertical` 画布，生成单页封面并导出 P
 
 Claude 会自动选择 `xhs-vertical` 画布，生成适合小红书的竖版海报。
 
-### 更多触发方式
+### 4.4 更多触发方式
 
 你可以在对话中用这些说法触发此 Skill：
 
@@ -105,7 +115,7 @@ Claude 会自动选择 `xhs-vertical` 画布，生成适合小红书的竖版海
 
 ---
 
-## 支持的画布尺寸
+## 5. 支持的画布尺寸
 
 | 画布 | 尺寸 | 用途 |
 |------|------|------|
@@ -117,7 +127,7 @@ Claude 会自动选择 `xhs-vertical` 画布，生成适合小红书的竖版海
 
 ---
 
-## 10 种内置布局
+## 6. 十种内置布局
 
 | 布局 | 效果 | 典型用途 |
 |------|------|---------|
@@ -136,7 +146,7 @@ Claude 会根据内容自动选择最佳布局，你也可以指定。
 
 ---
 
-## 颜色系统
+## 7. 颜色系统
 
 12 种内置霓虹色，可在对话中直接指定：
 
@@ -163,7 +173,7 @@ Claude 会根据内容自动选择最佳布局，你也可以指定。
 
 ---
 
-## 视频封面速查
+## 8.  视频封面速查
 
 | 平台 | 对 Claude 说 | 实际画布 |
 |------|-------------|---------|
@@ -174,7 +184,7 @@ Claude 会根据内容自动选择最佳布局，你也可以指定。
 
 ---
 
-## 视觉风格
+## 9. 视觉风格
 
 赛博朋克 PPT 的视觉 DNA 是固定的，不需要你操心：
 
@@ -188,7 +198,7 @@ Claude 会根据内容自动选择最佳布局，你也可以指定。
 
 ---
 
-## 输出格式
+## 10. 输出格式
 
 | 格式 | 说明 |
 |------|------|
@@ -198,9 +208,7 @@ Claude 会根据内容自动选择最佳布局，你也可以指定。
 
 你可以在对话中指定需要哪些格式。Claude 会自动调用对应的脚本。
 
----
-
-## 项目结构
+## 11. 项目结构
 
 ```
 cyberpunk-ppt-maker/
@@ -232,9 +240,9 @@ cyberpunk-ppt-maker/
 
 ---
 
-## 给开发者的参考
+## 12. 给开发者的参考
 
-### 从零到一完全指南（强烈推荐）
+### 12.1 从零到一完全指南（强烈推荐）
 
 如果你想**理解实现原理**或**改造出自己风格的 PPT Skill**，请阅读这份超详细的培训文档：
 
@@ -253,7 +261,7 @@ cyberpunk-ppt-maker/
 
 ---
 
-### API 参考文档
+### 12.2 API 参考文档
 
 如果你需要直接使用 Python 脚本（而非通过 Claude Code），详细文档在 `references/` 目录下：
 
@@ -261,7 +269,7 @@ cyberpunk-ppt-maker/
 - **Markdown 大纲语法**：[references/markdown-outline-format.md](references/markdown-outline-format.md)
 - **视觉风格规范**：[references/style-guide.md](references/style-guide.md)
 
-### 脚本直接调用
+### 12.3 脚本直接调用
 
 ```bash
 # Markdown → PPTX + PDF + PNG
@@ -278,7 +286,7 @@ python3 scripts/export_cyberpunk_images.py \
   --spec spec.json --output-dir ./pngs
 ```
 
-### 自定义扩展
+### 12.4 自定义扩展
 
 - **添加颜色**：编辑 `scripts/generate_cyberpunk_ppt.py` 中的 `COLORS` 字典
 - **修改字体**：修改同文件中的 `FONT_PATH_*` 变量
@@ -289,7 +297,7 @@ python3 scripts/export_cyberpunk_images.py \
 
 ---
 
-## 常见问题
+## 13. 常见问题
 
 **Q: 我不懂编程，能用吗？**
 可以。在 Claude Code 中用自然语言描述需求，Claude 自动完成所有技术操作。
@@ -318,8 +326,6 @@ python3 scripts/export_cyberpunk_images.py \
 ## 作者
 
 SoyCodeTrail
-
-[飞书学习文档](https://zcn93dhcbthz.feishu.cn/wiki/TETgwJnBqiTpCUkb54scTP97nth)
 
 ### 联系作者
 
