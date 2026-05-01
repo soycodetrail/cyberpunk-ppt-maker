@@ -319,6 +319,8 @@ python3 scripts/export_cyberpunk_images.py \
 
 SoyCodeTrail
 
+[飞书学习文档](https://zcn93dhcbthz.feishu.cn/wiki/TETgwJnBqiTpCUkb54scTP97nth)
+
 ### 联系作者
 
 
@@ -328,3 +330,8 @@ SoyCodeTrail
 - 小红书
 
   ![image-20260430232131575](docs/images/xiaohongshu.png)
+
+## 友情链接
+
+- [LINUX DO - 新的理想型社区](https://linux.do/)
+
