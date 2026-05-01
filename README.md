@@ -36,14 +36,23 @@ npx skills add https://github.com/soycodetrail/cyberpunk-ppt-maker.git
 
 ```bash
 pip install python-pptx pillow
-
-# 导出 PDF/PNG 需要（可选）
-sudo apt install libreoffice poppler-utils   # Ubuntu/Debian
-brew install libreoffice poppler             # macOS
-
-# 中文字体（必需）
-sudo apt install fonts-noto-cjk fonts-dejavu # Ubuntu/Debian
 ```
+
+**导出 PDF/PNG（可选）：**
+
+| 平台 | 安装命令 |
+|------|---------|
+| Ubuntu/Debian | `sudo apt install libreoffice poppler-utils` |
+| macOS | `brew install libreoffice poppler` |
+| Windows | 从 [LibreOffice 官网](https://www.libreoffice.org/download/) 下载安装；从 [poppler-windows Releases](https://github.com/oschwartz10612/poppler-windows/releases/) 下载解压，并将 `bin/` 目录添加到系统 `PATH` |
+
+**中文字体（必需）：**
+
+| 平台 | 安装方式 |
+|------|---------|
+| Ubuntu/Debian | `sudo apt install fonts-noto-cjk fonts-dejavu` |
+| macOS | `brew install font-noto-sans-cjk-sc` 或系统已自带中文字体 |
+| Windows | 下载 [Google Noto CJK 字体](https://fonts.google.com/noto/fonts) 并双击安装，或安装系统自带的中文字体包 |
 
 ### 3. 在 Claude Code 中使用
 
