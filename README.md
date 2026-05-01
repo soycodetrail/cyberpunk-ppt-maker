@@ -207,6 +207,10 @@ cyberpunk-ppt-maker/
 ├── SKILL.md                               # AI Agent 指令（Claude 读取此文件）
 ├── README.md                              # 本文件
 │
+├── docs/                                  # 文档
+│   ├── zero-to-hero-guide.md              # ★ 从零到一完全指南（原理 + 改造）
+│   └── images/                            # 文档配图
+│
 ├── assets/examples/                       # 可直接使用的示例
 │   ├── cyberpunk-demo-spec.json           # JSON 规格示例
 │   ├── cyberpunk-demo-outline.md          # Markdown 大纲示例
@@ -229,6 +233,27 @@ cyberpunk-ppt-maker/
 ---
 
 ## 给开发者的参考
+
+### 从零到一完全指南（强烈推荐）
+
+如果你想**理解实现原理**或**改造出自己风格的 PPT Skill**，请阅读这份超详细的培训文档：
+
+**[docs/zero-to-hero-guide.md](docs/zero-to-hero-guide.md)**
+
+它包含：
+
+| 内容 | 说明 |
+|------|------|
+| **核心原理拆解** | 逐行解读 1210 行核心引擎，OOXML 注入、文字测量、背景生成的每个细节 |
+| **5 级改造路线** | 从 15 分钟换颜色到半天打造全新风格，每级都有完整代码示例 |
+| **零基础友好** | 每个概念都有图解和比喻，改造不需要懂 PPT 底层技术 |
+| **多种风格参考** | 商务蓝、学术风、暗黑极简、中国风等 7 种风格的改造方向 |
+
+无论你是想微调颜色，还是要做出完全不同风格的 PPT 生成器，这份指南都能让你快速上手。
+
+---
+
+### API 参考文档
 
 如果你需要直接使用 Python 脚本（而非通过 Claude Code），详细文档在 `references/` 目录下：
 
@@ -259,6 +284,8 @@ python3 scripts/export_cyberpunk_images.py \
 - **修改字体**：修改同文件中的 `FONT_PATH_*` 变量
 - **添加布局**：添加 `render_<name>()` 函数，注册到 `RENDERERS` 等字典
 - **调整背景**：修改 `build_poster_background()` / `build_lecture_background()` 函数
+
+更详细的改造步骤和代码示例，请参考 **[完全指南](docs/zero-to-hero-guide.md)**。
 
 ---
 
