@@ -33,12 +33,13 @@ Generate consistent dark neon cyberpunk covers, single-slide posters, editable 1
 - Run:
 
 ```bash
-python3 /home/soycodetrail/.claude/skills/cyberpunk-ppt-maker/scripts/generate_cyberpunk_ppt.py \
+python3 <SKILL_DIR>/scripts/generate_cyberpunk_ppt.py \
   --spec ./cyberpunk-spec.json \
   --output ./output.pptx \
   --assets-dir ./generated_cyberpunk_assets \
   --pdf-output ./output.pdf
 ```
+(Replace `<SKILL_DIR>` with the actual skill path, e.g. `~/.workbuddy/skills/cyberpunk-ppt-maker`)
 
 5. Validate before claiming success:
 - Confirm the `.pptx` opens.
@@ -48,7 +49,7 @@ python3 /home/soycodetrail/.claude/skills/cyberpunk-ppt-maker/scripts/generate_c
 6. For direct local cover or slide PNG output:
 
 ```bash
-python3 /home/soycodetrail/.claude/skills/cyberpunk-ppt-maker/scripts/export_cyberpunk_images.py \
+python3 <SKILL_DIR>/scripts/export_cyberpunk_images.py \
   --spec ./cyberpunk-spec.json \
   --output-dir ./slide_pngs
 ```
@@ -58,7 +59,7 @@ This script builds the PPT internally, exports a PDF, and writes `slide_01.png`,
 7. For Markdown outline to JSON spec:
 
 ```bash
-python3 /home/soycodetrail/.claude/skills/cyberpunk-ppt-maker/scripts/markdown_to_cyberpunk_spec.py \
+python3 <SKILL_DIR>/scripts/markdown_to_cyberpunk_spec.py \
   --input ./cyberpunk-outline.md \
   --output ./cyberpunk-spec.json
 ```
@@ -68,7 +69,7 @@ Then feed the generated spec into the PPT or PNG workflow.
 8. For one-command Markdown to all deliverables:
 
 ```bash
-python3 /home/soycodetrail/.claude/skills/cyberpunk-ppt-maker/scripts/markdown_to_cyberpunk_spec.py \
+python3 <SKILL_DIR>/scripts/markdown_to_cyberpunk_spec.py \
   --input ./cyberpunk-outline.md \
   --output ./cyberpunk-spec.json \
   --pptx-output ./cyberpunk.pptx \
@@ -81,7 +82,7 @@ This writes the spec, the PPT, the PDF, and the PNG slides in one run.
 9. For reference-PPT style clone entrypoint:
 
 ```bash
-python3 /home/soycodetrail/.claude/skills/cyberpunk-ppt-maker/scripts/clone_reference_cyberpunk_style.py \
+python3 <SKILL_DIR>/scripts/clone_reference_cyberpunk_style.py \
   --reference-pptx ./reference.pptx \
   --content-markdown ./new-content.md \
   --output-spec ./clone-spec.json \
