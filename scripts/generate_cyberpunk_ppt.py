@@ -133,9 +133,40 @@ CANVAS_PRESETS = {
     },
 }
 
-FONT_PATH_BLACK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc"
-FONT_PATH_REGULAR = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-FONT_PATH_MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+import platform
+import os
+import glob
+
+def _find_font(candidates: list[str]) -> str | None:
+    """Return the first existing font path from a list of candidates."""
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
+
+# --- Font resolution with cross-platform fallbacks ---
+_FONT_CANDIDATES_BLACK = [
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc",   # Linux
+    "/System/Library/Fonts/STHeiti Medium.ttc",                 # macOS
+    "/Library/Fonts/Arial Unicode.ttf",                          # macOS fallback
+    "/System/Library/Fonts/Supplemental/Songti.ttc",             # macOS fallback
+]
+
+_FONT_CANDIDATES_REGULAR = [
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/System/Library/Fonts/STHeiti Medium.ttc",
+    "/Library/Fonts/Arial Unicode.ttf",
+]
+
+_FONT_CANDIDATES_MONO = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "/System/Library/Fonts/Menlo.ttc",
+    "/System/Library/Fonts/Monaco.ttf",
+]
+
+FONT_PATH_BLACK = _find_font(_FONT_CANDIDATES_BLACK) or _FONT_CANDIDATES_BLACK[-1]
+FONT_PATH_REGULAR = _find_font(_FONT_CANDIDATES_REGULAR) or _FONT_CANDIDATES_REGULAR[-1]
+FONT_PATH_MONO = _find_font(_FONT_CANDIDATES_MONO) or _FONT_CANDIDATES_MONO[-1]
 
 COLORS = {
     "WHITE": RGBColor(255, 255, 255),
