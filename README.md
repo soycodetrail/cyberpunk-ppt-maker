@@ -200,6 +200,27 @@ Claude 会根据内容自动选择最佳布局，你也可以指定。
 
 ## 10. 输出格式
 
+所有生成的文件会自动整理到统一目录下，**跨平台兼容**（Linux / macOS / Windows）：
+
+```
+~/ai-gen-ppt/<主题>_<时间戳>/
+├── <主题>.pptx          # 可编辑 PPT
+├── <主题>.pdf           # PDF 版本（可选）
+├── spec.json            # 生成规格
+├── assets/              # 赛博朋克背景资源
+│   ├── poster_bg_01.jpg
+│   └── ...
+└── png/                 # 逐页 PNG（可选）
+    ├── slide_01.png
+    └── ...
+```
+
+示例：
+```
+~/ai-gen-ppt/AI_绘图2026_全景模型横评_20260503_2315/
+~/ai-gen-ppt/本地部署指南_20260504_0900/
+```
+
 | 格式 | 说明 |
 |------|------|
 | `.pptx` | 可编辑的 PPT 文件，所有文字可修改 |
@@ -207,6 +228,8 @@ Claude 会根据内容自动选择最佳布局，你也可以指定。
 | `.png` | 每页独立图片，可直接上传到各平台 |
 
 你可以在对话中指定需要哪些格式。Claude 会自动调用对应的脚本。
+
+如果你手动指定了 `--output` 等路径参数，则以你指定的路径为准（向后兼容）。
 
 ## 11. 项目结构
 
@@ -272,18 +295,25 @@ cyberpunk-ppt-maker/
 ### 12.3 脚本直接调用
 
 ```bash
-# Markdown → PPTX + PDF + PNG
+# 自动输出模式（推荐）— 省略 --output，自动整理到 ~/ai-gen-ppt/
+python3 scripts/markdown_to_cyberpunk_spec.py \
+  --input outline.md
+
+# JSON → PPTX（自动输出）
+python3 scripts/generate_cyberpunk_ppt.py \
+  --spec spec.json
+
+# JSON → PNG（自动输出到 ~/ai-gen-ppt/<title>_<ts>/png/）
+python3 scripts/export_cyberpunk_images.py \
+  --spec spec.json
+
+# 显式指定路径（向后兼容）
 python3 scripts/markdown_to_cyberpunk_spec.py \
   --input outline.md --output spec.json \
   --pptx-output deck.pptx --pdf-output deck.pdf --png-dir ./pngs
 
-# JSON → PPTX
 python3 scripts/generate_cyberpunk_ppt.py \
   --spec spec.json --output deck.pptx
-
-# JSON → PNG
-python3 scripts/export_cyberpunk_images.py \
-  --spec spec.json --output-dir ./pngs
 ```
 
 ### 12.4 自定义扩展

@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import re
+from datetime import datetime
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,6 +18,50 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
 from lxml import etree
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Auto-output directory helpers
+# ---------------------------------------------------------------------------
+
+_SANITIZE_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def sanitize_dirname(text: str, max_length: int = 40) -> str:
+    cleaned = text.strip()
+    cleaned = _SANITIZE_RE.sub("", cleaned)
+    cleaned = re.sub(r"\s+", "_", cleaned)
+    cleaned = cleaned.strip("._")
+    cleaned = re.sub(r"_{2,}", "_", cleaned)
+    if len(cleaned) > max_length:
+        cleaned = cleaned[:max_length].rstrip("._")
+    return cleaned or "cyberpunk_deck"
+
+
+def resolve_output_dir(title: str, base_dir: Path | None = None) -> Path:
+    base = base_dir or Path.home() / "ai-gen-ppt"
+    ts = datetime.now().strftime("%Y%m%d_%H%M")
+    safe = sanitize_dirname(title)
+    out_dir = base / f"{safe}_{ts}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
+
+
+def extract_deck_title(spec: dict) -> str:
+    if spec.get("deck_title"):
+        return spec["deck_title"]
+    slides = spec.get("slides", [])
+    if slides:
+        first = slides[0]
+        titles = first.get("title", [])
+        if titles:
+            parts = [t["text"] for t in titles[:3]]
+            return "".join(parts)
+        if first.get("ghost"):
+            return first["ghost"]
+    return "Cyberpunk Deck"
 
 NSMAP = {
     "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
@@ -41,7 +88,7 @@ def add_glow_to_shape(shape, glow_color: RGBColor, size: int = 40000) -> None:
         alpha = etree.SubElement(srgb, "{%s}alpha" % NSMAP["a"])
         alpha.set("val", "35000")
     except Exception:
-        pass
+        logger.warning("add_glow_to_shape failed", exc_info=True)
 
 
 def add_glow_to_run(run, glow_color: RGBColor, size: int = 50000) -> None:
@@ -57,7 +104,7 @@ def add_glow_to_run(run, glow_color: RGBColor, size: int = 50000) -> None:
         alpha = etree.SubElement(srgb, "{%s}alpha" % NSMAP["a"])
         alpha.set("val", "40000")
     except Exception:
-        pass
+        logger.warning("add_glow_to_run failed", exc_info=True)
 
 
 def add_outer_shadow(shape, color_rgb: str = "000000",
@@ -80,7 +127,7 @@ def add_outer_shadow(shape, color_rgb: str = "000000",
         alpha = etree.SubElement(srgbClr, "{%s}alpha" % NSMAP["a"])
         alpha.set("val", str(alpha_pct))
     except Exception:
-        pass
+        logger.warning("add_outer_shadow failed", exc_info=True)
 
 
 def add_accent_line(slide, left_px, top_px, width_px, color_name, thickness=3):
@@ -144,6 +191,24 @@ def _find_font(candidates: list[str]) -> str | None:
             return p
     return None
 
+def _fallback_cjk_font() -> str:
+    """Find any CJK-capable font on the system via fc-list."""
+    try:
+        result = subprocess.run(
+            ["fc-list", ":lang=zh", "file"],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in result.stdout.strip().splitlines():
+            path = line.split(":")[0].strip()
+            if path and os.path.exists(path):
+                return path
+    except Exception:
+        pass
+    raise RuntimeError(
+        "No CJK font found. Install Noto Sans CJK or another CJK font, "
+        "or add your font path to _FONT_CANDIDATES_BLACK."
+    )
+
 # --- Font resolution with cross-platform fallbacks ---
 _FONT_CANDIDATES_BLACK = [
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc",   # Linux
@@ -152,20 +217,13 @@ _FONT_CANDIDATES_BLACK = [
     "/System/Library/Fonts/Supplemental/Songti.ttc",             # macOS fallback
 ]
 
-_FONT_CANDIDATES_REGULAR = [
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/System/Library/Fonts/STHeiti Medium.ttc",
-    "/Library/Fonts/Arial Unicode.ttf",
-]
-
 _FONT_CANDIDATES_MONO = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     "/System/Library/Fonts/Menlo.ttc",
     "/System/Library/Fonts/Monaco.ttf",
 ]
 
-FONT_PATH_BLACK = _find_font(_FONT_CANDIDATES_BLACK) or _FONT_CANDIDATES_BLACK[-1]
-FONT_PATH_REGULAR = _find_font(_FONT_CANDIDATES_REGULAR) or _FONT_CANDIDATES_REGULAR[-1]
+FONT_PATH_BLACK = _find_font(_FONT_CANDIDATES_BLACK) or _fallback_cjk_font()
 FONT_PATH_MONO = _find_font(_FONT_CANDIDATES_MONO) or _FONT_CANDIDATES_MONO[-1]
 
 COLORS = {
@@ -232,6 +290,29 @@ def _resolve_font_path(font_name: str) -> str:
     return FONT_PATH_BLACK
 
 
+def is_cjk(ch: str) -> bool:
+    """Return True if ch is a CJK character (for word-wrapping purposes)."""
+    cp = ord(ch)
+    if 0x4E00 <= cp <= 0x9FFF: return True   # CJK Unified Ideographs
+    if 0x3400 <= cp <= 0x4DBF: return True   # CJK Extension A
+    if 0xF900 <= cp <= 0xFAFF: return True   # CJK Compatibility Ideographs
+    if 0x3040 <= cp <= 0x309F: return True   # Hiragana
+    if 0x30A0 <= cp <= 0x30FF: return True   # Katakana
+    if 0xAC00 <= cp <= 0xD7AF: return True   # Hangul Syllables
+    if 0x3000 <= cp <= 0x303F: return True   # CJK Symbols and Punctuation
+    if 0xFF00 <= cp <= 0xFFEF: return True   # Fullwidth Forms
+    if 0x20000 <= cp <= 0x2A6DF: return True # CJK Extension B
+    if 0x2A700 <= cp <= 0x2B73F: return True # CJK Extension C
+    if 0x2B740 <= cp <= 0x2B81F: return True # CJK Extension D
+    if 0x2B820 <= cp <= 0x2CEAF: return True # CJK Extension E
+    if 0x2CEB0 <= cp <= 0x2EBEF: return True # CJK Extension F
+    if 0x2EBF0 <= cp <= 0x2EE5D: return True # CJK Extension I
+    if 0x30000 <= cp <= 0x3134F: return True # CJK Extension G
+    if 0x31350 <= cp <= 0x323AF: return True # CJK Extension H
+    if 0x2F800 <= cp <= 0x2FA1F: return True # CJK Compat Ideographs Supplement
+    return False
+
+
 def measure_text(text: str, font_path: str, font_size_pt: int, max_width_px: int) -> dict:
     """Measure text with Pillow getbbox() and simulate word wrapping.
 
@@ -243,14 +324,13 @@ def measure_text(text: str, font_path: str, font_size_pt: int, max_width_px: int
     # Split into tokens: CJK chars as individual tokens, Latin words grouped
     tokens: list[str] = []
     for ch in text:
-        # CJK Unified Ideographs, Hiragana, Katakana, etc.
-        if '一' <= ch <= '鿿' or '぀' <= ch <= 'ヿ' or '가' <= ch <= '힯':
+        if is_cjk(ch):
             tokens.append(ch)
         elif ch in (' ', '\t'):
             if tokens and tokens[-1] != ' ':
                 tokens.append(' ')
         else:
-            if tokens and tokens[-1] not in (' ', '') and '一' <= tokens[-1][-1] <= '鿿':
+            if tokens and tokens[-1] not in (' ', '') and is_cjk(tokens[-1][-1]):
                 tokens.append(ch)
             elif tokens and tokens[-1] not in (' ', ''):
                 tokens[-1] += ch
@@ -483,8 +563,7 @@ def add_textbox(slide, left, top, width, height, paragraphs, align=PP_ALIGN.LEFT
             inner_width = box_width_px - 10
             best_pt = fit_text_to_box(full_text, font_path, inner_width, box_height_px - 6, max_pt=max_pt, min_pt=8)
             if best_pt < max_pt:
-                for p in paragraphs:
-                    p["size"] = best_pt
+                paragraphs = [{**p, "size": best_pt} for p in paragraphs]
 
     for idx, spec in enumerate(paragraphs):
         paragraph = frame.paragraphs[0] if idx == 0 else frame.add_paragraph()
@@ -1179,12 +1258,21 @@ def make_presentation(spec: dict, output_path: Path, asset_dir: Path) -> None:
         slide.shapes.add_picture(str(bg), 0, 0, width=canvas["slide_w"], height=canvas["slide_h"])
         add_tag(slide, slide_spec.get("tag", f"CUT {idx + 1:02d}"), canvas_name=canvas_name)
         add_page_no(slide, idx + 1, canvas_name=canvas_name)
+
+        layout_name = slide_spec["layout"]
         if canvas_name == "xhs-vertical":
-            VERTICAL_RENDERERS[slide_spec["layout"]](slide, slide_spec)
+            registry = VERTICAL_RENDERERS
         elif canvas_name == "lecture-vertical":
-            LECTURE_VERTICAL_RENDERERS[slide_spec["layout"]](slide, slide_spec)
+            registry = LECTURE_VERTICAL_RENDERERS
         else:
-            RENDERERS[slide_spec["layout"]](slide, slide_spec)
+            registry = RENDERERS
+        if layout_name not in registry:
+            valid = sorted(registry.keys())
+            raise ValueError(
+                f"Unknown layout '{layout_name}' (slide {idx + 1}). "
+                f"Valid layouts for '{canvas_name}': {valid}"
+            )
+        registry[layout_name](slide, slide_spec)
 
     prs.save(str(output_path))
 
@@ -1194,6 +1282,11 @@ def load_spec(spec_path: Path) -> dict:
 
 
 def export_pdf(pptx_path: Path, pdf_output: Path) -> None:
+    if shutil.which("libreoffice") is None:
+        raise RuntimeError(
+            "libreoffice is required for PDF export but not found. "
+            "Install it with: sudo apt install libreoffice-impress"
+        )
     pdf_output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="cyberpunk-pdf-") as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -1220,19 +1313,31 @@ def export_pdf(pptx_path: Path, pdf_output: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate editable cyberpunk PPT from JSON spec.")
     parser.add_argument("--spec", required=True, help="Path to JSON spec file.")
-    parser.add_argument("--output", required=True, help="Output PPTX path.")
-    parser.add_argument("--assets-dir", default="generated_cyberpunk_assets", help="Directory for generated background assets.")
+    parser.add_argument("--output", help="Output PPTX path. Omit to auto-organize under ~/ai-gen-ppt/.")
+    parser.add_argument("--assets-dir", help="Directory for generated background assets.")
     parser.add_argument("--pdf-output", help="Optional output PDF path.")
     args = parser.parse_args()
 
     spec_path = Path(args.spec)
-    output_path = Path(args.output)
-    asset_dir = Path(args.assets_dir)
-
     spec = load_spec(spec_path)
+
+    if args.output:
+        output_path = Path(args.output)
+        asset_dir = Path(args.assets_dir) if args.assets_dir else Path("generated_cyberpunk_assets")
+    else:
+        deck_title = extract_deck_title(spec)
+        safe_title = sanitize_dirname(deck_title)
+        out_dir = resolve_output_dir(deck_title)
+        output_path = out_dir / f"{safe_title}.pptx"
+        asset_dir = out_dir / "assets"
+        spec_path = out_dir / "spec.json"
+        spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+
     make_presentation(spec, output_path, asset_dir)
+
     if args.pdf_output:
         export_pdf(output_path, Path(args.pdf_output))
+
     print(f"Generated {output_path} with {len(spec['slides'])} slides")
 
 

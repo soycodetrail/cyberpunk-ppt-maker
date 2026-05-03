@@ -29,8 +29,17 @@ Generate consistent dark neon cyberpunk covers, single-slide posters, editable 1
 - Write a JSON spec using [references/spec-format.md](references/spec-format.md), or convert a Markdown outline using [references/markdown-outline-format.md](references/markdown-outline-format.md).
 - Start from [assets/examples/cyberpunk-demo-spec.json](assets/examples/cyberpunk-demo-spec.json) when you want a fast template.
 - Start from [assets/examples/cyberpunk-demo-outline.md](assets/examples/cyberpunk-demo-outline.md) when the user thinks in Markdown headings instead of JSON.
-- Save the filled spec in the working directory.
-- Run:
+
+**Auto-output mode (recommended):** Omit `--output` to auto-organize all files under `~/ai-gen-ppt/<title>_<timestamp>/`:
+
+```bash
+python3 <SKILL_DIR>/scripts/generate_cyberpunk_ppt.py \
+  --spec ./cyberpunk-spec.json
+```
+
+This creates a directory like `~/ai-gen-ppt/赛博风PPT_20260503_2315/` containing the PPTX, `spec.json`, and `assets/`.
+
+**Explicit output paths (backward compatible):**
 
 ```bash
 python3 <SKILL_DIR>/scripts/generate_cyberpunk_ppt.py \
@@ -50,9 +59,10 @@ python3 <SKILL_DIR>/scripts/generate_cyberpunk_ppt.py \
 
 ```bash
 python3 <SKILL_DIR>/scripts/export_cyberpunk_images.py \
-  --spec ./cyberpunk-spec.json \
-  --output-dir ./slide_pngs
+  --spec ./cyberpunk-spec.json
 ```
+
+Omit `--output-dir` to auto-save PNGs under `~/ai-gen-ppt/<title>_<timestamp>/png/`. Or specify explicitly with `--output-dir ./slide_pngs`.
 
 This script builds the PPT internally, exports a PDF, and writes `slide_01.png`, `slide_02.png`, and so on.
 
@@ -60,11 +70,10 @@ This script builds the PPT internally, exports a PDF, and writes `slide_01.png`,
 
 ```bash
 python3 <SKILL_DIR>/scripts/markdown_to_cyberpunk_spec.py \
-  --input ./cyberpunk-outline.md \
-  --output ./cyberpunk-spec.json
+  --input ./cyberpunk-outline.md
 ```
 
-Then feed the generated spec into the PPT or PNG workflow.
+Omit `--output` to auto-organize under `~/ai-gen-ppt/`. All deliverables (spec, PPTX, PDF, PNG) go into one timestamped directory.
 
 8. For one-command Markdown to all deliverables:
 
@@ -84,13 +93,34 @@ This writes the spec, the PPT, the PDF, and the PNG slides in one run.
 ```bash
 python3 <SKILL_DIR>/scripts/clone_reference_cyberpunk_style.py \
   --reference-pptx ./reference.pptx \
-  --content-markdown ./new-content.md \
-  --output-spec ./clone-spec.json \
-  --pptx-output ./clone.pptx \
-  --pdf-output ./clone.pdf
+  --content-markdown ./new-content.md
 ```
 
-This uses the reference PPT only as an entrypoint for canvas and deck rhythm, then rebuilds the new deck in the same cyberpunk system.
+Omit `--output-spec` to auto-organize under `~/ai-gen-ppt/`. Or specify all paths explicitly for backward compatibility.
+
+## Auto-Output Directory
+
+When you omit explicit output path arguments, all generated files are automatically organized under:
+
+    ~/ai-gen-ppt/<title>_<timestamp>/
+
+Directory structure:
+
+    赛博风PPT_20260503_2315/
+    ├── 赛博风PPT.pptx
+    ├── 赛博风PPT.pdf          (when --pdf-output is used)
+    ├── spec.json
+    ├── assets/
+    │   ├── poster_bg_01.jpg
+    │   └── ...
+    └── png/
+        ├── slide_01.png
+        └── ...
+
+- Works on Linux, macOS, and Windows (uses `Path.home()`).
+- The title is extracted from the spec's `deck_title` field, or the first slide's title texts, or the `ghost` field.
+- Title is sanitized to remove characters invalid on any platform (`< > : " / \ | ? *`).
+- To override, pass explicit `--output` / `--output-dir` / `--output-spec` arguments.
 
 ## Prompt Workflow For Covers And Images
 

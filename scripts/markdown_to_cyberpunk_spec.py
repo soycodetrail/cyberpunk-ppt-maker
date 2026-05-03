@@ -8,7 +8,13 @@ from pathlib import Path
 import tempfile
 
 from export_cyberpunk_images import export_images
-from generate_cyberpunk_ppt import export_pdf, make_presentation
+from generate_cyberpunk_ppt import (
+    extract_deck_title,
+    export_pdf,
+    make_presentation,
+    resolve_output_dir,
+    sanitize_dirname,
+)
 
 
 SECTION_KEYS = {
@@ -59,8 +65,9 @@ def is_enabled(value: str) -> bool:
 
 def cleanup_title_source(text: str) -> str:
     cleaned = re.sub(r"[：:，,。.!！？?（）()\-\s]+", "", text)
-    for token in ["为什么", "现在", "如何", "怎么", "指南", "教程", "企业", "团队", "要在", "要", "彻底", "实现", "进行", "一个", "关于"]:
+    for token in ["为什么", "现在", "如何", "怎么", "指南", "教程", "企业", "团队", "要在", "彻底", "实现", "进行", "一个", "关于"]:
         cleaned = cleaned.replace(token, "")
+    cleaned = re.sub(r"^要", "", cleaned)
     cleaned = cleaned.replace("大模型", "模型")
     return cleaned or text.strip()
 
@@ -98,6 +105,8 @@ def stylize_title(slide_name: str) -> list[dict]:
 
 
 def infer_layout_from_body(slide: dict) -> None:
+    if slide.get("_layout_explicit"):
+        return
     body_items = slide.get("body", [])
     if not body_items:
         return
@@ -131,6 +140,7 @@ def parse_slide_blocks(
 ) -> dict:
     slide: dict = {
         "layout": default_layout,
+        "_layout_explicit": False,
         "tag": f"{tag_prefix} {slide_index:02d}".strip(),
         "title": [],
         "subtitle": [],
@@ -191,6 +201,7 @@ def parse_slide_blocks(
             current_block = None
             if key == "Layout":
                 slide["layout"] = value
+                slide["_layout_explicit"] = True
             elif key == "Ghost":
                 slide["ghost"] = value
             elif key == "Tag":
@@ -212,6 +223,7 @@ def parse_slide_blocks(
             raise ValueError(f"Slide {slide_index} is missing Title block")
 
     infer_layout_from_body(slide)
+    slide.pop("_layout_explicit", None)
     return slide
 
 
@@ -250,8 +262,7 @@ def build_ending_slide(deck_title: str, tag_prefix: str) -> dict:
 
 def normalize_tags(slides: list[dict], tag_prefix: str) -> None:
     for idx, slide in enumerate(slides, 1):
-        slide["tag"] = slide.get("tag") or f"{tag_prefix} {idx:02d}"
-        if slide["tag"].endswith("END"):
+        if not slide.get("tag"):
             slide["tag"] = f"{tag_prefix} {idx:02d}"
 
 
@@ -305,7 +316,7 @@ def parse_markdown_outline(text: str) -> dict:
     if batch_deck and slides:
         slides = [build_cover_slide(deck_title, tag_prefix, canvas)] + slides + [build_ending_slide(deck_title, tag_prefix)]
     normalize_tags(slides, tag_prefix)
-    return {"canvas": canvas, "slides": slides}
+    return {"canvas": canvas, "deck_title": deck_title, "slides": slides}
 
 
 def write_spec(spec: dict, output_path: Path) -> None:
@@ -316,7 +327,7 @@ def write_spec(spec: dict, output_path: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Convert markdown outline to cyberpunk PPT JSON spec.")
     parser.add_argument("--input", required=True, help="Markdown outline file.")
-    parser.add_argument("--output", required=True, help="Output JSON spec file.")
+    parser.add_argument("--output", help="Output JSON spec file. Omit to auto-organize under ~/ai-gen-ppt/.")
     parser.add_argument("--pptx-output", help="Optional PPTX output path.")
     parser.add_argument("--pdf-output", help="Optional PDF output path.")
     parser.add_argument("--png-dir", help="Optional directory for PNG slide exports.")
@@ -324,14 +335,39 @@ def main() -> None:
     args = parser.parse_args()
 
     input_path = Path(args.input)
-    output_path = Path(args.output)
     spec = parse_markdown_outline(input_path.read_text(encoding="utf-8"))
+
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        deck_title = extract_deck_title(spec)
+        out_dir = resolve_output_dir(deck_title)
+        output_path = out_dir / "spec.json"
+
     write_spec(spec, output_path)
 
-    assets_dir = Path(args.assets_dir) if args.assets_dir else output_path.parent / "generated_cyberpunk_assets"
-    pptx_output = Path(args.pptx_output) if args.pptx_output else None
-    pdf_output = Path(args.pdf_output) if args.pdf_output else None
-    png_dir = Path(args.png_dir) if args.png_dir else None
+    if args.assets_dir:
+        assets_dir = Path(args.assets_dir)
+    elif args.output:
+        assets_dir = output_path.parent / "generated_cyberpunk_assets"
+    else:
+        assets_dir = output_path.parent / "assets"
+
+    if args.output:
+        pptx_output = Path(args.pptx_output) if args.pptx_output else None
+        pdf_output = Path(args.pdf_output) if args.pdf_output else None
+        png_dir = Path(args.png_dir) if args.png_dir else None
+    else:
+        deck_title = extract_deck_title(spec)
+        safe_title = sanitize_dirname(deck_title)
+        out_dir = output_path.parent
+        pptx_output = out_dir / f"{safe_title}.pptx" if args.pptx_output is None or args.pptx_output == "" else Path(args.pptx_output)
+        if pptx_output is None:
+            pptx_output = out_dir / f"{safe_title}.pptx"
+        pdf_output = out_dir / f"{safe_title}.pdf" if args.pdf_output else None
+        png_dir = out_dir / "png" if args.png_dir is None or args.png_dir == "" else None
+        if png_dir is None and args.png_dir:
+            png_dir = Path(args.png_dir)
 
     if pptx_output:
         make_presentation(spec, pptx_output, assets_dir)

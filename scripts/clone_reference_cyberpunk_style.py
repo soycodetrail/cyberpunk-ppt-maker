@@ -9,14 +9,24 @@ import tempfile
 from pptx import Presentation
 
 from export_cyberpunk_images import export_images
-from generate_cyberpunk_ppt import export_pdf, make_presentation
+from generate_cyberpunk_ppt import (
+    extract_deck_title,
+    export_pdf,
+    make_presentation,
+    resolve_output_dir,
+    sanitize_dirname,
+)
 from markdown_to_cyberpunk_spec import parse_markdown_outline, write_spec
 
 
 def infer_canvas(reference_pptx: Path) -> str:
     prs = Presentation(str(reference_pptx))
     ratio = prs.slide_width / prs.slide_height
-    return "xhs-vertical" if ratio < 1 else "widescreen"
+    if ratio < 0.65:
+        return "lecture-vertical"
+    if ratio < 1:
+        return "xhs-vertical"
+    return "widescreen"
 
 
 def infer_tag_prefix(reference_pptx: Path) -> str | None:
@@ -44,7 +54,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Use an existing PPT as a style reference entrypoint for cyberpunk outputs.")
     parser.add_argument("--reference-pptx", required=True, help="Reference PPTX path.")
     parser.add_argument("--content-markdown", required=True, help="Markdown content outline to restyle.")
-    parser.add_argument("--output-spec", required=True, help="Output JSON spec path.")
+    parser.add_argument("--output-spec", help="Output JSON spec path. Omit to auto-organize under ~/ai-gen-ppt/.")
     parser.add_argument("--pptx-output", help="Optional PPTX output path.")
     parser.add_argument("--pdf-output", help="Optional PDF output path.")
     parser.add_argument("--png-dir", help="Optional PNG output directory.")
@@ -53,15 +63,31 @@ def main() -> None:
 
     reference_pptx = Path(args.reference_pptx)
     content_markdown = Path(args.content_markdown)
-    output_spec = Path(args.output_spec)
-    assets_dir = Path(args.assets_dir) if args.assets_dir else output_spec.parent / "generated_cyberpunk_assets"
-
     spec = clone_from_reference(reference_pptx, content_markdown)
+
+    if args.output_spec:
+        output_spec = Path(args.output_spec)
+        assets_dir = Path(args.assets_dir) if args.assets_dir else output_spec.parent / "generated_cyberpunk_assets"
+    else:
+        deck_title = extract_deck_title(spec)
+        safe_title = sanitize_dirname(deck_title)
+        out_dir = resolve_output_dir(deck_title)
+        output_spec = out_dir / "spec.json"
+        assets_dir = out_dir / "assets"
+
     write_spec(spec, output_spec)
 
-    pptx_output = Path(args.pptx_output) if args.pptx_output else None
-    pdf_output = Path(args.pdf_output) if args.pdf_output else None
-    png_dir = Path(args.png_dir) if args.png_dir else None
+    if args.output_spec:
+        pptx_output = Path(args.pptx_output) if args.pptx_output else None
+        pdf_output = Path(args.pdf_output) if args.pdf_output else None
+        png_dir = Path(args.png_dir) if args.png_dir else None
+    else:
+        deck_title = extract_deck_title(spec)
+        safe_title = sanitize_dirname(deck_title)
+        out_dir = output_spec.parent
+        pptx_output = out_dir / f"{safe_title}.pptx"
+        pdf_output = out_dir / f"{safe_title}.pdf" if args.pdf_output else None
+        png_dir = out_dir / "png" if args.png_dir else None
 
     if pptx_output:
         make_presentation(spec, pptx_output, assets_dir)
