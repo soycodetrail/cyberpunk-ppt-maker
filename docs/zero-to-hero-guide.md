@@ -124,7 +124,12 @@ cyberpunk-ppt-maker/
 │  ├── cyberpunk-demo-spec.json       完整的 JSON 规格示例
 │  ├── cyberpunk-demo-outline.md      完整的 Markdown 大纲示例
 │  ├── xhs-vertical-cover-outline.md  小红书竖版封面示例
-│  └── lecture-vertical-outline.md    抖音竖版课件示例
+│  ├── lecture-vertical-outline.md    抖音竖版课件示例
+│  ├── warm-cyber-camp-outline.md     暖色柔和赛博风格示例
+│  └── warm-cyber-background-gallery-outline.md  10 张暖色背景巡检示例
+│
+│  assets/backgrounds/
+│  └── warm-cyber/                    warm-cyber 的 10 张精选背景
 │
 │  ┌─── 参考文档（Claude 按需读取的知识库）
 │  │
@@ -132,6 +137,7 @@ cyberpunk-ppt-maker/
 │  ├── spec-format.md                 JSON 规格的完整字段说明
 │  ├── markdown-outline-format.md     Markdown 大纲的完整语法
 │  ├── style-guide.md                 视觉风格规范（颜色的规则、排版规则）
+│  ├── style-presets.md               可选风格预设说明
 │  └── prompt-templates.md            AI 图像生成的提示词模板
 │
 │  ┌─── 核心 Python 脚本（实际干活的代码）
@@ -327,6 +333,7 @@ SKILL.md 底部列出所有辅助文件：
 ```markdown
 ## Resources
 - references/style-guide.md: 视觉风格 DNA
+- references/style-presets.md: 可选风格预设
 - references/spec-format.md: JSON 规格格式
 - references/markdown-outline-format.md: Markdown 大纲语法
 - assets/examples/cyberpunk-demo-spec.json: 起步模板

@@ -12,6 +12,7 @@ Tag Prefix: DEMO / CUT
 Default Layout: poster_cards
 Auto Style Titles: on
 Canvas: widescreen
+Style: warm-cyber
 Batch Deck: on
 ```
 
@@ -19,6 +20,7 @@ Batch Deck: on
 - `Default Layout`: used when a slide does not specify `Layout:`
 - `Auto Style Titles`: when `on`, a long ordinary `##` heading can become a shorter cyberpunk title automatically if no `Title:` block is provided
 - `Canvas`: use `widescreen`, `xhs-vertical`, or `lecture-vertical`
+- `Style`: optional visual preset, such as `classic-cyberpunk` or `warm-cyber`
 - `Batch Deck`: when `on`, auto-prepend a cover slide and append an ending slide
 
 ## Slide Structure
@@ -65,6 +67,8 @@ Cards:
 ## Practical Notes
 
 - Keep titles short.
+- Use `Style: warm-cyber` when you want a softer warm cyberpunk deck while keeping black-grid tech DNA.
+- For dense warm cyberpunk explainers, alternate `Layout: system_map`, `Layout: pipeline_board`, `Layout: hub_spoke`, and `Layout: dense_grid` so pages stay visually related without becoming repetitive.
 - Keep card bodies to 1 or 2 short lines.
 - Prefer splitting one dense slide into multiple slides.
 - If no `Tag:` is provided, the script auto-builds one from `Tag Prefix`.

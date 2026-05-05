@@ -7,6 +7,7 @@
 ```json
 {
   "canvas": "widescreen",
+  "style": "classic-cyberpunk",
   "slides": [
     {
       "tag": "OMLX / CUT 01",
@@ -40,6 +41,10 @@
 - `code_mix`
 - `timeline`
 - `wide_stack`
+- `dense_grid`
+- `system_map`
+- `pipeline_board`
+- `hub_spoke`
 - `statement`
 - `ending`
 
@@ -48,6 +53,7 @@
 ### Top-Level Fields
 
 - `canvas`: `widescreen`, `xhs-vertical`, or `lecture-vertical`
+- `style`: optional visual preset. Use `classic-cyberpunk` or `warm-cyber`
 
 ### Shared Fields
 
@@ -55,6 +61,7 @@
 - `ghost`: large translucent background word
 - `title`: list of `{text,color,size}`
 - `subtitle`: list of subtitle lines
+- `style`: optional slide-level style override
 
 ### `cover`
 
@@ -87,6 +94,31 @@
 
 - `rows`: list of `{title,body,accent}`
 
+### `dense_grid`
+
+- `cards`: list of `{title,lines,accent}`. Works well for 6 to 8 dense knowledge modules.
+
+### `system_map`
+
+- `cards`: first 3 become the left input rail, next 6 become numbered process rows, next 4 become the right output rail
+- `rows`: optional bottom insight strips as `{title,body,accent}`
+- `steps`: optional top pipeline labels as `{label,accent}`
+- `hub`: optional center label
+- `left_title`: optional left rail title
+- `right_title`: optional right rail title
+
+### `pipeline_board`
+
+- `steps`: top pipeline labels as `{label,accent}`
+- `cards`: 6 to 8 process cards with embedded micro-chart decoration
+- `rows`: optional bottom insight strips
+
+### `hub_spoke`
+
+- `hub`: optional center label
+- `nodes`: 6 to 8 surrounding nodes as `{title,body,accent}`
+- `rows`: optional bottom insight strips
+
 ### `statement`
 
 - `lines`: list of `{text,color}`
@@ -111,10 +143,16 @@ Use these symbolic values:
 - `PURPLE`
 - `LIME`
 - `TEAL`
+- `AMBER`
+- `CORAL`
+- `PEACH`
+- `ROSE`
+- `GOLD`
 
 ## Practical Guidance
 
 - Keep titles short.
+- Use `style: "warm-cyber"` for workshop, course, and explainer decks that need a softer warm cyberpunk mood.
 - For editable PPT, prefer more slides over overstuffed slides.
 - If body text exceeds 2 short lines in a card, split the content.
 - The starter file lives at `assets/examples/cyberpunk-demo-spec.json`.

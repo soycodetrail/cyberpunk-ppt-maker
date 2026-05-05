@@ -37,6 +37,7 @@ env/
 *.pdf
 slide_*.png
 generated_cyberpunk_assets/
+local-output/
 slide_pngs/
 cyberpunk_pngs/
 pngs/
