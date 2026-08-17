@@ -8,7 +8,8 @@
 
 | 能力 | 说明 |
 |------|------|
-| **PPT 演示文稿** | 生成完整的多页 PPTX，10 种内置布局，文字全部可编辑 |
+| **PPT 演示文稿** | 生成完整的多页 PPTX，14 种内置布局，文字全部可编辑 |
+| **暖色赛博信息图** | `warm-cyber` 风格预设，适合知识密集型架构图、流程图、能力矩阵 |
 | **视频封面** | 抖音/TikTok (1080x1920)、YouTube/B站 (1920x1080)、小红书 (1080x1440) |
 | **社交海报** | 小红书封面、竖版海报，多种尺寸 |
 | **批量导出** | 同时输出 PPTX + PDF + PNG，一次搞定 |
@@ -246,12 +247,21 @@ cyberpunk-ppt-maker/
 │   ├── cyberpunk-demo-spec.json           # JSON 规格示例
 │   ├── cyberpunk-demo-outline.md          # Markdown 大纲示例
 │   ├── xhs-vertical-cover-outline.md      # 小红书封面示例
-│   └── lecture-vertical-outline.md        # 竖版课件示例
+│   ├── lecture-vertical-outline.md        # 竖版课件示例
+│   ├── warm-cyber-camp-outline.md         # 暖色柔和赛博风格示例
+│   └── warm-cyber-background-gallery-outline.md # 10 张暖色背景巡检示例
+│
+├── assets/backgrounds/                    # 风格预设背景素材
+│   └── warm-cyber/                        # warm-cyber 的 10 张精选背景
+│
+├── assets/vector/                         # 可复用矢量视觉参考
+│   └── warm-cyber/                        # 箭头、折线、反馈线、断续框参考
 │
 ├── references/                            # 详细参考文档
 │   ├── spec-format.md                     # JSON 规格完整格式
 │   ├── markdown-outline-format.md         # Markdown 大纲完整语法
 │   ├── style-guide.md                     # 视觉风格规范
+│   ├── style-presets.md                   # 风格预设说明
 │   └── prompt-templates.md                # AI 图像生成提示词
 │
 └── scripts/                               # 后端生成脚本（Claude 自动调用）
@@ -291,6 +301,7 @@ cyberpunk-ppt-maker/
 - **JSON 规格格式**：[references/spec-format.md](references/spec-format.md)
 - **Markdown 大纲语法**：[references/markdown-outline-format.md](references/markdown-outline-format.md)
 - **视觉风格规范**：[references/style-guide.md](references/style-guide.md)
+- **风格预设说明**：[references/style-presets.md](references/style-presets.md)
 
 ### 12.3 脚本直接调用
 
@@ -370,4 +381,3 @@ SoyCodeTrail
 ## 友情链接
 
 - [LINUX DO - 新的理想型社区](https://linux.do/)
-

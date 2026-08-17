@@ -293,6 +293,7 @@ def parse_markdown_outline(text: str) -> dict:
     default_layout = "poster_cards"
     auto_style_titles = True
     canvas = "widescreen"
+    style = "classic-cyberpunk"
     batch_deck = False
     for line in global_lines:
         stripped = line.strip()
@@ -304,6 +305,8 @@ def parse_markdown_outline(text: str) -> dict:
             auto_style_titles = is_enabled(stripped.split(":", 1)[1].strip())
         elif stripped.startswith("Canvas:"):
             canvas = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("Style:"):
+            style = stripped.split(":", 1)[1].strip()
         elif stripped.startswith("Batch Deck:"):
             batch_deck = is_enabled(stripped.split(":", 1)[1].strip())
 
@@ -316,7 +319,7 @@ def parse_markdown_outline(text: str) -> dict:
     if batch_deck and slides:
         slides = [build_cover_slide(deck_title, tag_prefix, canvas)] + slides + [build_ending_slide(deck_title, tag_prefix)]
     normalize_tags(slides, tag_prefix)
-    return {"canvas": canvas, "deck_title": deck_title, "slides": slides}
+    return {"canvas": canvas, "style": style, "deck_title": deck_title, "slides": slides}
 
 
 def write_spec(spec: dict, output_path: Path) -> None:

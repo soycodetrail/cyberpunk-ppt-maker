@@ -146,8 +146,14 @@ Directory structure:
   - `code_mix`
   - `timeline`
   - `wide_stack`
+  - `dense_grid`
+  - `system_map`
+  - `pipeline_board`
+  - `hub_spoke`
   - `statement`
   - `ending`
+- For `Style: warm-cyber`, prefer `system_map`, `pipeline_board`, `hub_spoke`, and `dense_grid` for dense architecture-style explainers. Alternate these layouts across the deck so every slide keeps the same warm cyberpunk mood while presenting a different information structure.
+- For warm-cyber arrows, connectors, and frames, follow the vector references in `assets/vector/warm-cyber/`: use terminal line arrows instead of manually rotated triangle shapes, route hub connections as elbow/bus paths, use dashed lines only for feedback, and use broken panel frames for major architecture blocks.
 - Do not overfill slides. If content is long, split it into more slides instead of shrinking everything.
 - For 小红书封面 or other vertical poster requests, set `Canvas: xhs-vertical` in the Markdown outline or JSON spec.
 - For `1080x1920` vertical explainers like the OMLX lecture deck, set `Canvas: lecture-vertical`. This path uses centered title stacks, lecture-page layouts, and sharper backgrounds without the blur-heavy XHS poster treatment.
@@ -155,6 +161,7 @@ Directory structure:
 ## Resources
 
 - [references/style-guide.md](references/style-guide.md): the fixed visual DNA.
+- [references/style-presets.md](references/style-presets.md): optional deck-level visual moods such as `warm-cyber`.
 - [references/prompt-templates.md](references/prompt-templates.md): reusable cover and inner-page prompts.
 - [references/spec-format.md](references/spec-format.md): JSON spec schema and examples for PPT generation.
 - [references/markdown-outline-format.md](references/markdown-outline-format.md): Markdown heading format for auto-building specs.
